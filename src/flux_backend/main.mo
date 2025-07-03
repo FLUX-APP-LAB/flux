@@ -1,5 +1,587 @@
-actor {
-  public query func greet(name : Text) : async Text {
-    return "Hello, " # name # "!";
-  };
-};
+import Principal "mo:base/Principal";
+import HashMap "mo:base/HashMap";
+import Time "mo:base/Time";
+import Array "mo:base/Array";
+import Result "mo:base/Result";
+import Text "mo:base/Text";
+import Nat "mo:base/Nat";
+import Bool "mo:base/Bool";
+import Buffer "mo:base/Buffer";
+import Iter "mo:base/Iter";
+import Int "mo:base/Int";
+
+actor UserManager {
+    // Types
+    type UserTier = {
+        #Free;
+        #Premium;
+        #Creator;
+        #Partner;
+        #Admin;
+    };
+
+    type VerificationStatus = {
+        #Unverified;
+        #Pending;
+        #Verified;
+        #Rejected;
+    };
+
+    type Badge = {
+        id: Text;
+        name: Text;
+        description: Text;
+        icon: Blob;
+        rarity: Text; // Common, Rare, Epic, Legendary
+        requirement: Text;
+        earnedAt: Int;
+    };
+
+    type SocialLinks = {
+        twitter: ?Text;
+        instagram: ?Text;
+        youtube: ?Text;
+        discord: ?Text;
+        website: ?Text;
+    };
+
+    type UserPreferences = {
+        theme: Text; // dark, light, auto
+        language: Text;
+        notifications: NotificationSettings;
+        privacy: PrivacySettings;
+        streaming: StreamingSettings;
+    };
+
+    type NotificationSettings = {
+        emailNotifications: Bool;
+        pushNotifications: Bool;
+        followNotifications: Bool;
+        subscriptionNotifications: Bool;
+        liveStreamNotifications: Bool;
+        mentionNotifications: Bool;
+    };
+
+    type PrivacySettings = {
+        profileVisibility: Text; // public, followers, private
+        showFollowers: Bool;
+        showFollowing: Bool;
+        allowDirectMessages: Text; // everyone, followers, none
+        showOnlineStatus: Bool;
+    };
+
+    type StreamingSettings = {
+        defaultStreamTitle: Text;
+        defaultCategory: Text;
+        autoStartRecording: Bool;
+        subscriberOnlyMode: Bool;
+        slowModeDefault: Nat;
+        moderationLevel: Text; // strict, moderate, lenient
+    };
+
+    type UserStats = {
+        totalViews: Nat;
+        totalLikes: Nat;
+        totalStreams: Nat;
+        totalStreamTime: Nat;
+        averageViewers: Nat;
+        peakViewers: Nat;
+        totalRevenue: Nat;
+        followersGained30d: Nat;
+        viewsGained30d: Nat;
+    };
+
+    type User = {
+        id: Principal;
+        username: Text;
+        displayName: Text;
+        email: ?Text;
+        avatar: ?Blob;
+        banner: ?Blob;
+        bio: Text;
+        location: ?Text;
+        website: ?Text;
+        socialLinks: SocialLinks;
+        followers: [Principal];
+        following: [Principal];
+        blockedUsers: [Principal];
+        subscribers: [Principal];
+        coinBalance: Nat;
+        bitsBalance: Nat;
+        tier: UserTier;
+        verificationStatus: VerificationStatus;
+        badges: [Badge];
+        preferences: UserPreferences;
+        stats: UserStats;
+        streamKey: ?Text;
+        moderatedChannels: [Principal];
+        partnershipInfo: ?PartnershipInfo;
+        createdAt: Int;
+        lastActive: Int;
+        isActive: Bool;
+        isSuspended: Bool;
+        suspensionReason: ?Text;
+        suspensionEndDate: ?Int;
+    };
+
+    type PartnershipInfo = {
+        applicationDate: Int;
+        approvalDate: ?Int;
+        partnerLevel: Text; // Bronze, Silver, Gold, Platinum
+        revenueShare: Nat;
+        exclusivePerks: [Text];
+        monthlyGuarantee: Nat;
+    };
+
+    type Subscription = {
+        id: Text;
+        subscriber: Principal;
+        streamer: Principal;
+        tier: Nat;
+        startDate: Int;
+        endDate: Int;
+        autoRenew: Bool;
+        totalPaid: Nat;
+        giftedBy: ?Principal;
+        isActive: Bool;
+    };
+
+    type UserRelationship = {
+        #Following;
+        #Follower;
+        #Mutual;
+        #Blocked;
+        #Subscriber;
+    };
+
+    // State
+    private stable var usersEntries : [(Principal, User)] = [];
+    private stable var usernamesEntries : [(Text, Principal)] = [];
+    private stable var subscriptionsEntries : [(Text, Subscription)] = [];
+    private stable var userSessionsEntries : [(Principal, Int)] = [];
+    private stable var suspendedUsersEntries : [(Principal, (Text, Int))] = [];
+    
+    private var users = HashMap.fromIter<Principal, User>(usersEntries.vals(), usersEntries.size(), Principal.equal, Principal.hash);
+    private var usernames = HashMap.fromIter<Text, Principal>(usernamesEntries.vals(), usernamesEntries.size(), Text.equal, Text.hash);
+    private var subscriptions = HashMap.fromIter<Text, Subscription>(subscriptionsEntries.vals(), subscriptionsEntries.size(), Text.equal, Text.hash);
+    private var userSessions = HashMap.fromIter<Principal, Int>(userSessionsEntries.vals(), userSessionsEntries.size(), Principal.equal, Principal.hash);
+    private var suspendedUsers = HashMap.fromIter<Principal, (Text, Int)>(suspendedUsersEntries.vals(), suspendedUsersEntries.size(), Principal.equal, Principal.hash);
+
+    system func preupgrade() {
+        usersEntries := Iter.toArray(users.entries());
+        usernamesEntries := Iter.toArray(usernames.entries());
+        subscriptionsEntries := Iter.toArray(subscriptions.entries());
+        userSessionsEntries := Iter.toArray(userSessions.entries());
+        suspendedUsersEntries := Iter.toArray(suspendedUsers.entries());
+    };
+
+    system func postupgrade() {
+        usersEntries := [];
+        usernamesEntries := [];
+        subscriptionsEntries := [];
+        userSessionsEntries := [];
+        suspendedUsersEntries := [];
+    };
+
+    // Core User Functions
+    public shared(msg) func createUser(username: Text, displayName: Text, email: ?Text) : async Result.Result<User, Text> {
+        let caller = msg.caller;
+        
+        // Validate username
+        if (Text.size(username) < 3 or Text.size(username) > 20) {
+            return #err("Username must be between 3 and 20 characters");
+        };
+        
+        // Check if username exists
+        switch (usernames.get(username)) {
+            case (?_existingUser) { return #err("Username already exists") };
+            case null { };
+        };
+        
+        // Check if user already exists
+        switch (users.get(caller)) {
+            case (?_existingUser) { return #err("User already exists") };
+            case null { };
+        };
+
+        let newUser : User = {
+            id = caller;
+            username = username;
+            displayName = displayName;
+            email = email;
+            avatar = null;
+            banner = null;
+            bio = "";
+            location = null;
+            website = null;
+            socialLinks = {
+                twitter = null;
+                instagram = null;
+                youtube = null;
+                discord = null;
+                website = null;
+            };
+            followers = [];
+            following = [];
+            blockedUsers = [];
+            subscribers = [];
+            coinBalance = 0;
+            bitsBalance = 0;
+            tier = #Free;
+            verificationStatus = #Unverified;
+            badges = [];
+            preferences = {
+                theme = "dark";
+                language = "en";
+                notifications = {
+                    emailNotifications = true;
+                    pushNotifications = true;
+                    followNotifications = true;
+                    subscriptionNotifications = true;
+                    liveStreamNotifications = true;
+                    mentionNotifications = true;
+                };
+                privacy = {
+                    profileVisibility = "public";
+                    showFollowers = true;
+                    showFollowing = true;
+                    allowDirectMessages = "followers";
+                    showOnlineStatus = true;
+                };
+                streaming = {
+                    defaultStreamTitle = "Live Stream";
+                    defaultCategory = "Just Chatting";
+                    autoStartRecording = false;
+                    subscriberOnlyMode = false;
+                    slowModeDefault = 0;
+                    moderationLevel = "moderate";
+                };
+            };
+            stats = {
+                totalViews = 0;
+                totalLikes = 0;
+                totalStreams = 0;
+                totalStreamTime = 0;
+                averageViewers = 0;
+                peakViewers = 0;
+                totalRevenue = 0;
+                followersGained30d = 0;
+                viewsGained30d = 0;
+            };
+            streamKey = null;
+            moderatedChannels = [];
+            partnershipInfo = null;
+            createdAt = Time.now();
+            lastActive = Time.now();
+            isActive = true;
+            isSuspended = false;
+            suspensionReason = null;
+            suspensionEndDate = null;
+        };
+
+        users.put(caller, newUser);
+        usernames.put(username, caller);
+        #ok(newUser)
+    };
+
+    public shared(msg) func updateProfile(displayName: ?Text, bio: ?Text, avatar: ?Blob, banner: ?Blob, socialLinks: ?SocialLinks) : async Result.Result<User, Text> {
+        let caller = msg.caller;
+        
+        switch (users.get(caller)) {
+            case (?user) {
+                let updatedUser = {
+                    user with
+                    displayName = switch (displayName) { case (?name) name; case null user.displayName };
+                    bio = switch (bio) { case (?newBio) newBio; case null user.bio };
+                    avatar = switch (avatar) { case (?newAvatar) ?newAvatar; case null user.avatar };
+                    banner = switch (banner) { case (?newBanner) ?newBanner; case null user.banner };
+                    socialLinks = switch (socialLinks) { case (?links) links; case null user.socialLinks };
+                    lastActive = Time.now();
+                };
+                users.put(caller, updatedUser);
+                #ok(updatedUser)
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    public shared(msg) func followUser(targetUser: Principal) : async Result.Result<(), Text> {
+        let caller = msg.caller;
+        
+        if (caller == targetUser) {
+            return #err("Cannot follow yourself");
+        };
+        
+        // Update follower's following list
+        switch (users.get(caller)) {
+            case (?user) {
+                let updatedFollowing = Array.append(user.following, [targetUser]);
+                let updatedUser = { user with following = updatedFollowing };
+                users.put(caller, updatedUser);
+            };
+            case null { return #err("User not found") };
+        };
+        
+        // Update target user's followers list
+        switch (users.get(targetUser)) {
+            case (?user) {
+                let updatedFollowers = Array.append(user.followers, [caller]);
+                let updatedUser = { user with followers = updatedFollowers };
+                users.put(targetUser, updatedUser);
+            };
+            case null { return #err("Target user not found") };
+        };
+        
+        #ok()
+    };
+
+    public shared(msg) func unfollowUser(targetUser: Principal) : async Result.Result<(), Text> {
+        let caller = msg.caller;
+        
+        // Update follower's following list
+        switch (users.get(caller)) {
+            case (?user) {
+                let updatedFollowing = Array.filter(user.following, func (id: Principal) : Bool { id != targetUser });
+                let updatedUser = { user with following = updatedFollowing };
+                users.put(caller, updatedUser);
+            };
+            case null { return #err("User not found") };
+        };
+        
+        // Update target user's followers list
+        switch (users.get(targetUser)) {
+            case (?user) {
+                let updatedFollowers = Array.filter(user.followers, func (id: Principal) : Bool { id != caller });
+                let updatedUser = { user with followers = updatedFollowers };
+                users.put(targetUser, updatedUser);
+            };
+            case null { return #err("Target user not found") };
+        };
+        
+        #ok()
+    };
+
+    public shared(msg) func subscribe(streamer: Principal, tier: Nat, duration: Nat) : async Result.Result<Text, Text> {
+        let caller = msg.caller;
+        let subscriptionId = Principal.toText(caller) # "_" # Principal.toText(streamer) # "_" # Int.toText(Time.now());
+        
+        // Calculate cost based on tier and duration
+        let cost = calculateSubscriptionCost(tier, duration);
+        
+        // Check user balance
+        switch (users.get(caller)) {
+            case (?user) {
+                if (user.coinBalance < cost) {
+                    return #err("Insufficient coins");
+                };
+                
+                // Since we've verified user.coinBalance >= cost, this subtraction is safe
+                assert(user.coinBalance >= cost);
+                let newBalance = Nat.sub(user.coinBalance, cost);
+                let updatedUser = { user with coinBalance = newBalance };
+                users.put(caller, updatedUser);
+            };
+            case null { return #err("User not found") };
+        };
+        
+        // Create subscription
+        let subscription : Subscription = {
+            id = subscriptionId;
+            subscriber = caller;
+            streamer = streamer;
+            tier = tier;
+            startDate = Time.now();
+            endDate = Time.now() + (duration * 24 * 60 * 60 * 1000000000); // duration in days
+            autoRenew = false;
+            totalPaid = cost;
+            giftedBy = null;
+            isActive = true;
+        };
+        
+        subscriptions.put(subscriptionId, subscription);
+        
+        // Update streamer's subscriber list
+        switch (users.get(streamer)) {
+            case (?user) {
+                let updatedSubscribers = Array.append(user.subscribers, [caller]);
+                let updatedUser = { user with subscribers = updatedSubscribers };
+                users.put(streamer, updatedUser);
+            };
+            case null { return #err("Streamer not found") };
+        };
+        
+        #ok(subscriptionId)
+    };
+
+    public shared(msg) func applyForPartnership(_description: Text, _averageViewers: Nat, _monthlyRevenue: Nat) : async Result.Result<(), Text> {
+        let caller = msg.caller;
+        
+        switch (users.get(caller)) {
+            case (?user) {
+                // Check eligibility criteria
+                if (user.stats.totalViews < 10000 or Array.size(user.followers) < 500) {
+                    return #err("Does not meet minimum requirements");
+                };
+                
+                let partnershipInfo : PartnershipInfo = {
+                    applicationDate = Time.now();
+                    approvalDate = null;
+                    partnerLevel = "Bronze";
+                    revenueShare = 70;
+                    exclusivePerks = ["Custom Emotes", "Subscriber Badges"];
+                    monthlyGuarantee = 0;
+                };
+                
+                let updatedUser = { 
+                    user with 
+                    partnershipInfo = ?partnershipInfo;
+                    verificationStatus = #Pending;
+                };
+                users.put(caller, updatedUser);
+                #ok()
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    public shared(msg) func updateUserPreferences(preferences: UserPreferences) : async Result.Result<(), Text> {
+        let caller = msg.caller;
+        
+        switch (users.get(caller)) {
+            case (?user) {
+                let updatedUser = { user with preferences = preferences };
+                users.put(caller, updatedUser);
+                #ok()
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    public shared(msg) func blockUser(targetUser: Principal) : async Result.Result<(), Text> {
+        let caller = msg.caller;
+        
+        switch (users.get(caller)) {
+            case (?user) {
+                let updatedBlockedUsers = Array.append(user.blockedUsers, [targetUser]);
+                let updatedUser = { user with blockedUsers = updatedBlockedUsers };
+                users.put(caller, updatedUser);
+                #ok()
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    // Query Functions
+    public query func getUser(userId: Principal) : async Result.Result<User, Text> {
+        switch (users.get(userId)) {
+            case (?user) { #ok(user) };
+            case null { #err("User not found") };
+        }
+    };
+
+    public query func getUserByUsername(username: Text) : async Result.Result<User, Text> {
+        switch (usernames.get(username)) {
+            case (?userId) {
+                switch (users.get(userId)) {
+                    case (?user) { #ok(user) };
+                    case null { #err("User not found") };
+                }
+            };
+            case null { #err("Username not found") };
+        }
+    };
+
+    public query func getUserStats(userId: Principal) : async Result.Result<UserStats, Text> {
+        switch (users.get(userId)) {
+            case (?user) { #ok(user.stats) };
+            case null { #err("User not found") };
+        }
+    };
+
+    public query func getUserSubscriptions(userId: Principal) : async [Subscription] {
+        let userSubs = Buffer.Buffer<Subscription>(0);
+        for ((_, subscription) in subscriptions.entries()) {
+            if (subscription.subscriber == userId and subscription.isActive) {
+                userSubs.add(subscription);
+            };
+        };
+        Buffer.toArray(userSubs)
+    };
+
+    public query func searchUsers(searchQuery: Text, limit: Nat) : async [User] {
+        let results = Buffer.Buffer<User>(0);
+        let lowerQuery = searchQuery; // Note: Text.toLowercase is not available in older versions
+        var count = 0;
+        
+        label searchLoop for ((_, user) in users.entries()) {
+            if (count >= limit) { break searchLoop };
+            
+            let lowerUsername = user.username;
+            let lowerDisplayName = user.displayName;
+            
+            // Simple substring matching (case-sensitive for now)
+            if (Text.contains(lowerUsername, #text lowerQuery) or 
+                Text.contains(lowerDisplayName, #text lowerQuery)) {
+                results.add(user);
+                count += 1;
+            };
+        };
+        
+        Buffer.toArray(results)
+    };
+
+    // Private helper functions
+    private func calculateSubscriptionCost(tier: Nat, duration: Nat) : Nat {
+        let baseCost = switch (tier) {
+            case 1 { 500 }; // $4.99 equivalent
+            case 2 { 1000 }; // $9.99 equivalent
+            case 3 { 2500 }; // $24.99 equivalent
+            case _ { 500 };
+        };
+        baseCost * duration
+    };
+
+    // Admin functions
+    public shared(_msg) func suspendUser(userId: Principal, reason: Text, duration: Nat) : async Result.Result<(), Text> {
+        // TODO: Add admin authorization check
+        // For now, anyone can suspend (should be restricted to admins)
+        
+        switch (users.get(userId)) {
+            case (?user) {
+                let suspensionEndDate = Time.now() + (duration * 24 * 60 * 60 * 1000000000); // duration in days
+                let updatedUser = {
+                    user with
+                    isSuspended = true;
+                    suspensionReason = ?reason;
+                    suspensionEndDate = ?suspensionEndDate;
+                };
+                users.put(userId, updatedUser);
+                suspendedUsers.put(userId, (reason, suspensionEndDate));
+                #ok()
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    public shared(_msg) func verifyUser(userId: Principal) : async Result.Result<(), Text> {
+        // TODO: Add admin authorization check
+        // For now, anyone can verify (should be restricted to admins)
+        
+        switch (users.get(userId)) {
+            case (?user) {
+                let updatedUser = {
+                    user with
+                    verificationStatus = #Verified;
+                };
+                users.put(userId, updatedUser);
+                #ok()
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    // Private helper functions
+    private func _generateStreamKey(caller: Principal) : Text {
+        "sk_" # Principal.toText(caller) # "_" # Int.toText(Time.now())
+    };
+}

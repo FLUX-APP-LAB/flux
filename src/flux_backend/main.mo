@@ -9,6 +9,8 @@ import Bool "mo:base/Bool";
 import Buffer "mo:base/Buffer";
 import Iter "mo:base/Iter";
 import Int "mo:base/Int";
+import VideoManager "video";
+import LiveStreamManager "livestream";
 
 actor UserManager {
     // Types
@@ -166,6 +168,12 @@ actor UserManager {
     private var subscriptions = HashMap.fromIter<Text, Subscription>(subscriptionsEntries.vals(), subscriptionsEntries.size(), Text.equal, Text.hash);
     private var userSessions = HashMap.fromIter<Principal, Int>(userSessionsEntries.vals(), userSessionsEntries.size(), Principal.equal, Principal.hash);
     private var suspendedUsers = HashMap.fromIter<Principal, (Text, Int)>(suspendedUsersEntries.vals(), suspendedUsersEntries.size(), Principal.equal, Principal.hash);
+
+    // Video Manager Instance
+    private var videoManager = VideoManager.VideoManager();
+    
+    // LiveStream Manager Instance
+    private var liveStreamManager = LiveStreamManager.LiveStreamManager();
 
     system func preupgrade() {
         usersEntries := Iter.toArray(users.entries());
@@ -583,5 +591,143 @@ actor UserManager {
     // Private helper functions
     private func _generateStreamKey(caller: Principal) : Text {
         "sk_" # Principal.toText(caller) # "_" # Int.toText(Time.now())
+    };
+
+    // Video functions 
+    public shared(msg) func uploadVideo(
+        title: Text,
+        description: Text,
+        videoData: Blob,
+        thumbnail: ?Blob,
+        videoType: VideoManager.VideoType,
+        category: VideoManager.VideoCategory,
+        tags: [Text],
+        hashtags: [Text],
+        settings: {
+            isPrivate: Bool;
+            isUnlisted: Bool;
+            allowComments: Bool;
+            allowDuets: Bool;
+            allowRemix: Bool;
+            isMonetized: Bool;
+            ageRestricted: Bool;
+            scheduledAt: ?Int;
+        }
+    ) : async Result.Result<Text, Text> {
+        await videoManager.uploadVideo(
+            msg.caller,
+            title,
+            description,
+            videoData,
+            thumbnail,
+            videoType,
+            category,
+            tags,
+            hashtags,
+            settings
+        )
+    };
+
+    public shared(msg) func createClip(
+        streamId: Text,
+        startTime: Nat,
+        endTime: Nat,
+        title: Text,
+        description: Text
+    ) : async Result.Result<Text, Text> {
+        await videoManager.createClip(msg.caller, streamId, startTime, endTime, title, description)
+    };
+
+    public shared(msg) func likeVideo(videoId: Text) : async Result.Result<(), Text> {
+        await videoManager.likeVideo(msg.caller, videoId)
+    };
+
+    public shared(msg) func addComment(videoId: Text, content: Text, parentCommentId: ?Text) : async Result.Result<Text, Text> {
+        await videoManager.addComment(msg.caller, videoId, content, parentCommentId)
+    };
+
+    public shared(msg) func shareVideo(videoId: Text, platform: Text) : async Result.Result<(), Text> {
+        await videoManager.shareVideo(msg.caller, videoId, platform)
+    };
+
+    public shared(msg) func recordView(videoId: Text, watchTime: Nat) : async Result.Result<(), Text> {
+        await videoManager.recordView(msg.caller, videoId, watchTime)
+    };
+
+    public shared(msg) func createPlaylist(title: Text, description: Text, isPublic: Bool) : async Result.Result<Text, Text> {
+        await videoManager.createPlaylist(msg.caller, title, description, isPublic)
+    };
+
+    public shared(msg) func addVideoToPlaylist(playlistId: Text, videoId: Text) : async Result.Result<(), Text> {
+        await videoManager.addVideoToPlaylist(msg.caller, playlistId, videoId)
+    };
+
+    // Video query functions
+    public query func getVideo(videoId: Text) : async Result.Result<VideoManager.Video, Text> {
+        videoManager.getVideo(videoId)
+    };
+
+    public query func getVideosByUser(userId: Principal, limit: Nat, offset: Nat) : async [VideoManager.Video] {
+        videoManager.getVideosByUser(userId, limit, offset)
+    };
+
+    public query func getTrendingVideos(category: ?VideoManager.VideoCategory, timeframe: Nat, limit: Nat) : async [VideoManager.Video] {
+        videoManager.getTrendingVideos(category, timeframe, limit)
+    };
+
+    public query func getVideoFeed(userId: Principal, limit: Nat, offset: Nat) : async [VideoManager.Video] {
+        videoManager.getVideoFeed(userId, limit, offset)
+    };
+
+    public query func searchVideos(searchQuery: Text, category: ?VideoManager.VideoCategory, limit: Nat) : async [VideoManager.Video] {
+        videoManager.searchVideos(searchQuery, category, limit)
+    };
+
+    public query func getVideoComments(videoId: Text, limit: Nat, offset: Nat) : async [VideoManager.Comment] {
+        videoManager.getVideoComments(videoId, limit, offset)
+    };
+
+    public query func getVideoAnalytics(videoId: Text) : async Result.Result<VideoManager.VideoAnalytics, Text> {
+        videoManager.getVideoAnalytics(videoId)
+    };
+
+    public query func getUserPlaylists(userId: Principal) : async [VideoManager.Playlist] {
+        videoManager.getUserPlaylists(userId)
+    };
+
+    // LiveStream Functions
+    public shared(msg) func createStream(
+        title: Text,
+        description: Text,
+        category: LiveStreamManager.StreamCategory,
+        tags: [Text],
+        maturityRating: Text,
+        quality: LiveStreamManager.StreamQuality
+    ) : async Result.Result<Text, Text> {
+        await liveStreamManager.createStream(msg.caller, title, description, category, tags, maturityRating, quality)
+    };
+
+    public shared(msg) func startStream(streamId: Text) : async Result.Result<(), Text> {
+        await liveStreamManager.startStream(msg.caller, streamId)
+    };
+
+    public shared(msg) func endStream(streamId: Text) : async Result.Result<(), Text> {
+        await liveStreamManager.endStream(msg.caller, streamId)
+    };
+
+    public shared(msg) func sendChatMessage(streamId: Text, message: Text, bits: Nat) : async Result.Result<Text, Text> {
+        await liveStreamManager.sendChatMessage(msg.caller, streamId, message, bits)
+    };
+
+    public query func getStream(streamId: Text) : async Result.Result<LiveStreamManager.LiveStream, Text> {
+        liveStreamManager.getStream(streamId)
+    };
+
+    public query func getLiveStreams(category: ?LiveStreamManager.StreamCategory, language: ?Text, limit: Nat) : async [LiveStreamManager.LiveStream] {
+        liveStreamManager.getLiveStreams(category, language, limit)
+    };
+
+    public query func getStreamsByUser(userId: Principal, limit: Nat) : async [LiveStreamManager.LiveStream] {
+        liveStreamManager.getStreamsByUser(userId, limit)
     };
 }

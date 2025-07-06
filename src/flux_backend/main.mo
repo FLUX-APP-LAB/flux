@@ -11,6 +11,10 @@ import Iter "mo:base/Iter";
 import Int "mo:base/Int";
 import VideoManager "video";
 import LiveStreamManager "livestream";
+import TokenManager "token";
+import EmoteManager "emote";
+import AnalyticsManager "analytics";
+import NotificationManager "notification";
 
 actor UserManager {
     // Types
@@ -174,6 +178,18 @@ actor UserManager {
     
     // LiveStream Manager Instance
     private var liveStreamManager = LiveStreamManager.LiveStreamManager();
+    
+    // Token Manager Instance
+    private var tokenManager = TokenManager.TokenManager();
+    
+    // Emote Manager Instance
+    private var emoteManager = EmoteManager.EmoteManager();
+    
+    // Analytics Manager Instance
+    private var analyticsManager = AnalyticsManager.AnalyticsManager();
+    
+    // Notification Manager Instance
+    private var notificationManager = NotificationManager.NotificationManager();
 
     system func preupgrade() {
         usersEntries := Iter.toArray(users.entries());
@@ -729,5 +745,129 @@ actor UserManager {
 
     public query func getStreamsByUser(userId: Principal, limit: Nat) : async [LiveStreamManager.LiveStream] {
         liveStreamManager.getStreamsByUser(userId, limit)
+    };
+
+    // Token Management Functions
+    public shared(msg) func purchaseAppCoins(icpAmount: Nat) : async Result.Result<Nat, Text> {
+        await tokenManager.purchaseAppCoins(msg.caller, icpAmount)
+    };
+
+    public shared(msg) func purchaseBits(coinAmount: Nat) : async Result.Result<Nat, Text> {
+        await tokenManager.purchaseBits(msg.caller, coinAmount)
+    };
+
+    public shared(msg) func processSubscription(streamer: Principal, tier: Nat) : async Result.Result<(), Text> {
+        await tokenManager.processSubscription(msg.caller, streamer, tier)
+    };
+
+    public shared(msg) func sendGift(recipient: Principal, giftType: Text, amount: Nat) : async Result.Result<(), Text> {
+        await tokenManager.sendGift(msg.caller, recipient, giftType, amount)
+    };
+
+    public shared(msg) func cheerWithBits(streamer: Principal, bitsAmount: Nat) : async Result.Result<(), Text> {
+        await tokenManager.cheerWithBits(msg.caller, streamer, bitsAmount)
+    };
+
+    public shared(msg) func requestPayout(amount: Nat) : async Result.Result<Text, Text> {
+        await tokenManager.requestPayout(msg.caller, amount)
+    };
+
+    public query func getBalance(user: Principal) : async ?TokenManager.TokenBalance {
+        tokenManager.getBalance(user)
+    };
+
+    public query func getRevenueShare(creator: Principal) : async ?TokenManager.RevenueShare {
+        tokenManager.getRevenueShare(creator)
+    };
+
+    public query func getTransactionHistory(user: Principal, limit: Nat) : async [TokenManager.Transaction] {
+        tokenManager.getTransactionHistory(user, limit)
+    };
+
+    // Emote Management Functions
+    public shared(msg) func createEmote(name: Text, imageData: Blob, tier: Nat, animated: Bool, category: EmoteManager.EmoteCategory) : async Result.Result<Text, Text> {
+        await emoteManager.createEmote(msg.caller, name, imageData, tier, animated, category)
+    };
+
+    public shared(msg) func purchaseEmote(emoteId: Text) : async Result.Result<(), Text> {
+        await emoteManager.purchaseEmote(msg.caller, emoteId)
+    };
+
+    public shared(msg) func mintNFT(emoteId: Text, recipientId: Principal) : async Result.Result<Text, Text> {
+        await emoteManager.mintNFT(msg.caller, emoteId, recipientId)
+    };
+
+    public shared(msg) func listEmoteForSale(emoteId: Text, price: Nat) : async Result.Result<Text, Text> {
+        await emoteManager.listEmoteForSale(msg.caller, emoteId, price)
+    };
+
+    public shared(msg) func buyEmoteFromMarketplace(listingId: Text) : async Result.Result<(), Text> {
+        await emoteManager.buyEmoteFromMarketplace(msg.caller, listingId)
+    };
+
+    public query func getUserEmotes(user: Principal) : async [EmoteManager.Emote] {
+        emoteManager.getUserEmotes(user)
+    };
+
+    public query func getEmotesByCategory(category: EmoteManager.EmoteCategory) : async [EmoteManager.Emote] {
+        emoteManager.getEmotesByCategory(category)
+    };
+
+    public query func getMarketplaceListings() : async [EmoteManager.MarketplaceListing] {
+        emoteManager.getMarketplaceListings()
+    };
+
+    // Analytics Management Functions
+    public shared(msg) func recordAnalyticsView(userId: Principal, contentId: Text, watchTime: Float) : async Result.Result<(), Text> {
+        await analyticsManager.recordView(msg.caller, userId, contentId, watchTime)
+    };
+
+    public shared(msg) func generateRecommendations(userId: Principal) : async [AnalyticsManager.RecommendationScore] {
+        await analyticsManager.generateRecommendations(msg.caller, userId)
+    };
+
+    public shared(msg) func updateTrendingScores() : async Result.Result<(), Text> {
+        await analyticsManager.updateTrendingScores(msg.caller)
+    };
+
+    public query func getTrendingContent(category: ?Text, timeframe: Nat) : async [AnalyticsManager.TrendingContent] {
+        analyticsManager.getTrendingContent(category, timeframe)
+    };
+
+    public query func getCreatorAnalytics(userId: Principal) : async ?AnalyticsManager.UserMetrics {
+        analyticsManager.getCreatorAnalytics(userId)
+    };
+
+    // Notification Management Functions
+    public shared(msg) func sendNotification(
+        recipient: Principal,
+        sender: ?Principal,
+        notificationType: NotificationManager.NotificationType,
+        title: Text,
+        message: Text,
+        priority: NotificationManager.NotificationPriority,
+        data: ?Text
+    ) : async Result.Result<Text, Text> {
+        await notificationManager.sendNotification(msg.caller, recipient, sender, notificationType, title, message, priority, data)
+    };
+
+    public shared(msg) func markAsRead(notificationId: Text) : async Result.Result<(), Text> {
+        await notificationManager.markAsRead(msg.caller, notificationId)
+    };
+
+    public shared(msg) func updateNotificationPreferences(userId: Principal, prefs: NotificationManager.NotificationPreferences) : async Result.Result<(), Text> {
+        await notificationManager.updatePreferences(msg.caller, userId, prefs)
+    };
+
+    public shared(msg) func subscribeToPush(userId: Principal, subscription: NotificationManager.PushSubscription) : async Result.Result<(), Text> {
+        await notificationManager.subscribeToPush(msg.caller, userId, subscription)
+    };
+
+    public shared(msg) func broadcastAnnouncement(title: Text, message: Text) : async Result.Result<(), Text> {
+        await notificationManager.broadcastAnnouncement(msg.caller, title, message)
+    };
+
+    public query func getUserNotifications(userId: Principal, limit: Nat, offset: Nat) : async [NotificationManager.Notification] {
+        notificationManager.getUserNotifications(userId, limit, offset)
     };
 }

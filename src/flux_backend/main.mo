@@ -15,6 +15,7 @@ import TokenManager "token";
 import EmoteManager "emote";
 import AnalyticsManager "analytics";
 import NotificationManager "notification";
+import ContentModerationManager "contentmoderation";
 
 actor UserManager {
     // Types
@@ -190,6 +191,9 @@ actor UserManager {
     
     // Notification Manager Instance
     private var notificationManager = NotificationManager.NotificationManager();
+    
+    // Content Moderation Manager Instance
+    private var contentModerationManager = ContentModerationManager.ContentModerationManager();
 
     system func preupgrade() {
         usersEntries := Iter.toArray(users.entries());
@@ -869,5 +873,88 @@ actor UserManager {
 
     public query func getUserNotifications(userId: Principal, limit: Nat, offset: Nat) : async [NotificationManager.Notification] {
         notificationManager.getUserNotifications(userId, limit, offset)
+    };
+
+    // Content Moderation Management Functions
+    public shared(_msg) func scanContent(contentId: Text, contentType: Text, content: Text) : async ContentModerationManager.AutoModerationResult {
+        await contentModerationManager.scanContent(contentId, contentType, content)
+    };
+
+    public shared(msg) func reportContent(
+        contentId: Text,
+        contentType: Text,
+        reason: ContentModerationManager.ModerationReason,
+        description: Text
+    ) : async Result.Result<Text, Text> {
+        await contentModerationManager.reportContent(contentId, contentType, msg.caller, reason, description)
+    };
+
+    public shared(msg) func reviewReport(
+        reportId: Text,
+        action: ContentModerationManager.ModerationAction,
+        resolution: Text
+    ) : async Result.Result<(), Text> {
+        await contentModerationManager.reviewReport(reportId, msg.caller, action, resolution)
+    };
+
+    public shared(_msg) func addModerationRule(rule: ContentModerationManager.ModerationRule) : async Result.Result<(), Text> {
+        await contentModerationManager.addModerationRule(rule)
+    };
+
+    public shared(_msg) func updateTrustScore(userId: Principal, adjustment: Float) : async Result.Result<(), Text> {
+        await contentModerationManager.updateTrustScore(userId, adjustment)
+    };
+
+    // Additional Content Moderation Functions
+    public func getModerationRules() : async [ContentModerationManager.ModerationRule] {
+        await contentModerationManager.getModerationRules()
+    };
+    
+    public func getAutoModerationResults(contentId: Text) : async ?ContentModerationManager.AutoModerationResult {
+        await contentModerationManager.getAutoModerationResults(contentId)
+    };
+    
+    public shared(_msg) func updateModerationRule(ruleId: Text, updates: {
+        name: ?Text;
+        description: ?Text;
+        severity: ?Nat;
+        threshold: ?Float;
+        enabled: ?Bool;
+    }) : async Result.Result<(), Text> {
+        await contentModerationManager.updateModerationRule(ruleId, updates)
+    };
+    
+    public shared(_msg) func deleteModerationRule(ruleId: Text) : async Result.Result<(), Text> {
+        await contentModerationManager.deleteModerationRule(ruleId)
+    };
+    
+    public func getUserTrustScore(userId: Principal) : async Float {
+        await contentModerationManager.getUserTrustScore(userId)
+    };
+    
+    public shared(_msg) func escalateReport(reportId: Text, priority: Text) : async Result.Result<(), Text> {
+        await contentModerationManager.escalateReport(reportId, priority)
+    };
+    
+    public func getHighPriorityReports() : async [ContentModerationManager.ModerationReport] {
+        await contentModerationManager.getHighPriorityReports()
+    };
+    
+    public func getReportsByStatus(status: Text) : async [ContentModerationManager.ModerationReport] {
+        await contentModerationManager.getReportsByStatus(status)
+    };
+    
+    public func getReportsByReason(reason: ContentModerationManager.ModerationReason) : async [ContentModerationManager.ModerationReport] {
+        await contentModerationManager.getReportsByReason(reason)
+    };
+    
+    public func getModerationStats() : async {
+        totalReports: Nat;
+        pendingReports: Nat;
+        resolvedReports: Nat;
+        flaggedContent: Nat;
+        averageConfidence: Float;
+    } {
+        await contentModerationManager.getModerationStatsPublic()
     };
 }

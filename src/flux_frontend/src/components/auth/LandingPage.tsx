@@ -4,22 +4,23 @@ import { Wallet, Play, Users, Zap, ArrowRight, Gamepad2, Headphones, Video } fro
 import { Button } from '../ui/Button';
 import { SignupPage } from './SignupPage';
 import { useAppStore } from '../../store/appStore';
-import { useAuth } from '../../hooks/useAuth';
+import { useWallet } from '../../hooks/useWallet';
 import { generateMockData } from '../../lib/utils';
 import toast from 'react-hot-toast';
 
 export const LandingPage: React.FC = () => {
   const [showSignup, setShowSignup] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { setCurrentUser, setAuthenticated } = useAppStore();
-  const { login, isLoading: authLoading, isAuthenticated, principal, getWalletAddress } = useAuth();
+  const { login, isAuthenticated, principal } = useWallet();
 
   const connectWallet = async () => {
+    setIsLoading(true);
     try {
-      const success = await login();
+      await login();
       
-      if (success) {
-        const walletAddress = getWalletAddress();
-        toast.success(`Wallet connected! ${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)}`);
+      if (isAuthenticated) {
+        toast.success(`Wallet connected! ${principal?.slice(0, 6)}...${principal?.slice(-4)}`);
         
         // Check if this wallet has an existing account (simulate database lookup)
         const hasExistingAccount = Math.random() > 0.7; // 30% chance of existing account
@@ -29,7 +30,7 @@ export const LandingPage: React.FC = () => {
           const { mockUsers } = generateMockData();
           const existingUser = {
             ...mockUsers[0],
-            walletAddress: walletAddress || undefined,
+            walletAddress: principal || undefined,
             principal,
           };
           setCurrentUser(existingUser);
@@ -46,6 +47,8 @@ export const LandingPage: React.FC = () => {
     } catch (error) {
       console.error('Wallet connection error:', error);
       toast.error('Failed to connect wallet. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -213,12 +216,12 @@ export const LandingPage: React.FC = () => {
               >
                 <Button
                   onClick={connectWallet}
-                  isLoading={authLoading}
+                  isLoading={isLoading}
                   className="bg-flux-gradient hover:opacity-90 text-white px-12 py-6 text-xl font-bold rounded-2xl shadow-2xl transform hover:scale-105 transition-all duration-300"
                   size="lg"
                 >
                   <Wallet className="w-6 h-6 mr-3" />
-                  {authLoading ? 'Connecting Wallet...' : 'Connect Wallet & Start'}
+                  {isLoading ? 'Connecting Wallet...' : 'Connect Wallet & Start'}
                   <ArrowRight className="w-6 h-6 ml-3" />
                 </Button>
                 

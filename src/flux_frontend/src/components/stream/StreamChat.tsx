@@ -125,7 +125,7 @@ export const StreamChat: React.FC<StreamChatProps> = ({ streamId, className }) =
       {/* Input */}
       <div className="p-4 border-t border-flux-bg-tertiary">
         <div className="flex items-center space-x-2">
-          <div className="flex-1 relative">
+            <div className="flex-1 relative">
             <textarea
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
@@ -134,8 +134,14 @@ export const StreamChat: React.FC<StreamChatProps> = ({ streamId, className }) =
               className="w-full px-3 py-2 bg-flux-bg-tertiary text-flux-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-flux-primary resize-none"
               rows={1}
               maxLength={500}
+              style={{ height: 'auto', minHeight: '40px', maxHeight: '120px', overflowY: 'auto' }}
+              onInput={e => {
+              const target = e.target as HTMLTextAreaElement;
+              target.style.height = 'auto';
+              target.style.height = `${target.scrollHeight}px`;
+              }}
             />
-          </div>
+            </div>
           <Button size="sm" variant="ghost">
             <Smile className="w-4 h-4" />
           </Button>

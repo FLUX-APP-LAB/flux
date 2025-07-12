@@ -15,10 +15,13 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Plus
+  Plus,
+  DollarSign,
+  Zap
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store/appStore';
+import { useWallet } from '../../hooks/useWallet';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { CreateContentModal } from '../create/CreateContentModal';
@@ -33,6 +36,13 @@ export const DesktopSidebar: React.FC = () => {
     desktopSidebarCollapsed,
     setDesktopSidebarCollapsed
   } = useAppStore();
+  const { 
+    balance, 
+    formatWalletAddress, 
+    walletAddress, 
+    disconnectWallet, 
+    isConnected 
+  } = useWallet();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const mainNavItems = [
@@ -62,7 +72,8 @@ export const DesktopSidebar: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await disconnectWallet();
     setAuthenticated(false);
     setCurrentUser(null);
     setActivePage('home');
@@ -271,6 +282,52 @@ export const DesktopSidebar: React.FC = () => {
 
           {/* Wallet & Logout */}
           <div className="space-y-2">
+            {/* Wallet Balance Display */}
+            {!desktopSidebarCollapsed && isConnected && balance && (
+              <div className="bg-flux-bg-tertiary rounded-lg p-3 mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-flux-text-secondary">Balance</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <Wallet className="w-3 h-3 text-flux-text-secondary" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center space-x-1">
+                    <DollarSign className="w-3 h-3 text-flux-accent-gold" />
+                    <span className="text-flux-text-primary font-medium">
+                      {balance.appCoinBalance || 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Zap className="w-3 h-3 text-flux-primary" />
+                    <span className="text-flux-text-primary font-medium">
+                      {balance.bitsBalance || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t border-flux-bg-secondary">
+                  <p className="text-xs text-flux-text-secondary">
+                    {formatWalletAddress(walletAddress ?? undefined)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Wallet Connection Status for Collapsed Sidebar */}
+            {!desktopSidebarCollapsed && !isConnected && (
+              <div className="bg-flux-bg-tertiary rounded-lg p-3 mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-flux-text-secondary">Wallet</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    <Wallet className="w-3 h-3 text-flux-text-secondary" />
+                  </div>
+                </div>
+                <p className="text-xs text-flux-text-secondary">Not connected</p>
+              </div>
+            )}
+
             <Button
               variant="secondary"
               className="w-full justify-start"

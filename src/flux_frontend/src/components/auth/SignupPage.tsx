@@ -17,7 +17,7 @@ import {
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { useAppStore } from '../../store/appStore';
-import { useAuth } from '../../hooks/useAuth';
+import { useWallet } from '../../hooks/useWallet';
 import toast from 'react-hot-toast';
 
 interface SignupPageProps {
@@ -38,6 +38,7 @@ interface ValidationErrors {
 }
 
 export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
+  const {newAuthActor} = useWallet();
   const [formData, setFormData] = useState<FormData>({
     username: '',
     displayName: '',
@@ -46,21 +47,22 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
   });
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0); // 0: Wallet, 1: Profile Info, 2: Profile Picture
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { setCurrentUser, setAuthenticated, setWalletAddress, setPrincipal } = useAppStore();
-  const { isAuthenticated, principal, getWalletAddress, login, logout, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, principal, login, logout } = useWallet();
 
   // Check if user is already authenticated and skip wallet connection
   useEffect(() => {
     if (isAuthenticated && principal) {
       setCurrentStep(1); // Skip to profile setup
-      setWalletAddress(getWalletAddress());
+      setWalletAddress(principal);
       setPrincipal(principal);
     }
-  }, [isAuthenticated, principal, getWalletAddress, setWalletAddress, setPrincipal]);
+  }, [isAuthenticated, principal, setWalletAddress, setPrincipal]);
 
   const validateField = (field: keyof FormData, value: string): string | undefined => {
     switch (field) {
@@ -159,9 +161,10 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
   };
 
   const handleWalletConnect = async () => {
+    setIsConnecting(true);
     try {
-      const success = await login();
-      if (success) {
+      await login();
+      if (isAuthenticated) {
         setCurrentStep(1);
         toast.success('Wallet connected successfully!');
       } else {
@@ -170,6 +173,8 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Wallet connection error:', error);
       toast.error('An error occurred while connecting your wallet.');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -199,17 +204,28 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
   const handleSubmit = async () => {
     if (!validateStep(1)) return;
     
+    // Additional check for actor initialization
+    if (!newAuthActor) {
+      toast.error('Please ensure your wallet is properly connected and try again.');
+      console.error('Actor not available at submit time:', {
+        isAuthenticated,
+        principal,
+        newAuthActor
+      });
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
       // Simulate account creation
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      const walletAddress = getWalletAddress();
+      const walletAddress = principal;
       
       // Create user object
       const newUser = {
-        id: Date.now().toString(),
+        id: principal,
         username: formData.username,
         displayName: formData.displayName,
         avatar: formData.profilePicture || `https://images.pexels.com/photos/${Math.floor(Math.random() * 1000000)}/pexels-photo-${Math.floor(Math.random() * 1000000)}.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop`,
@@ -223,8 +239,57 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
       };
       
       setCurrentUser(newUser);
-      setAuthenticated(true);
-      toast.success('Welcome to FLUX! Your account has been created successfully.');
+      
+      // Create user profile on the backend
+      try {
+        if (!newAuthActor) {
+          console.error('Actor not initialized. Current authentication state:', {
+            isAuthenticated,
+            principal,
+            newAuthActor
+          });
+          throw new Error('Authentication not complete. Please try connecting your wallet again.');
+        }
+        
+        console.log('Creating user with actor:', {
+          username: formData.username,
+          displayName: formData.displayName,
+          email: formData.email,
+          principal
+        });
+        
+        const result = await newAuthActor.createUser(
+          formData.username,
+          formData.displayName,
+          formData.email ? [formData.email] : []
+        );
+        
+        console.log('User profile creation result:', result);
+        
+        if ('err' in result) {
+          console.error('Backend error:', result.err);
+          toast.error(`Failed to create profile: ${result.err}`);
+          return;
+        }
+        
+        console.log('Profile successfully created:', result.ok);
+        
+        if (formData.profilePicture) {
+          // TODO: Implement profile picture upload to backend
+          console.log('Profile picture will be uploaded separately');
+        }
+        
+        setAuthenticated(true);
+        toast.success('Welcome to FLUX! Your account has been created successfully.');
+      } catch (error) {
+        console.error('Error creating user profile:', error);
+        if (error instanceof Error && error.message.includes('Authentication not complete')) {
+          toast.error(error.message);
+        } else {
+          toast.error('Failed to create user profile. Please try again.');
+        }
+        return;
+      }
     } catch (error) {
       toast.error('Failed to create account. Please try again.');
     } finally {
@@ -373,10 +438,10 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
 
                         <Button
                           onClick={handleWalletConnect}
-                          isLoading={authLoading}
+                          isLoading={isConnecting}
                           className="w-full bg-flux-gradient hover:opacity-90 text-white py-3 text-lg font-semibold"
                         >
-                          {authLoading ? 'Connecting...' : (
+                          {isConnecting ? 'Connecting...' : (
                             <>
                               <Wallet className="w-5 h-5 mr-2" />
                               Connect Internet Identity
@@ -665,11 +730,11 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
                         <span className="text-flux-text-secondary">Email:</span>
                         <span className="text-flux-text-primary">{formData.email}</span>
                       </div>
-                      {getWalletAddress() && (
+                      {principal && (
                         <div className="flex justify-between">
                           <span className="text-flux-text-secondary">Wallet:</span>
                           <span className="text-flux-text-primary font-mono text-sm">
-                            {getWalletAddress()?.slice(0, 6)}...{getWalletAddress()?.slice(-4)}
+                            {principal?.slice(0, 6)}...{principal?.slice(-4)}
                           </span>
                         </div>
                       )}

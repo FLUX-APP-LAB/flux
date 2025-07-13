@@ -38,7 +38,7 @@ interface ValidationErrors {
 }
 
 export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
-  const {newAuthActor} = useWallet();
+  const { newAuthActor, getUser } = useWallet();
   const [formData, setFormData] = useState<FormData>({
     username: '',
     displayName: '',
@@ -117,14 +117,21 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
     setIsUploadingImage(true);
     
     try {
-      // Simulate image upload and processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Convert file to base64
+      const base64String = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result);
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
       
-      // Create object URL for preview
-      const imageUrl = URL.createObjectURL(file);
-      setFormData(prev => ({ ...prev, profilePicture: imageUrl }));
+      setFormData(prev => ({ ...prev, profilePicture: base64String }));
       toast.success('Profile picture uploaded successfully!');
     } catch (error) {
+      console.error('Error converting image to base64:', error);
       toast.error('Failed to upload image. Please try again.');
     } finally {
       setIsUploadingImage(false);
@@ -139,10 +146,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
   };
 
   const removeProfilePicture = () => {
-    if (formData.profilePicture) {
-      URL.revokeObjectURL(formData.profilePicture);
-      setFormData(prev => ({ ...prev, profilePicture: null }));
-    }
+    setFormData(prev => ({ ...prev, profilePicture: null }));
   };
 
   const validateStep = (step: number): boolean => {
@@ -228,19 +232,26 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
         id: principal,
         username: formData.username,
         displayName: formData.displayName,
-        avatar: formData.profilePicture || `https://images.pexels.com/photos/${Math.floor(Math.random() * 1000000)}/pexels-photo-${Math.floor(Math.random() * 1000000)}.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop`,
+        avatar: formData.profilePicture
+          ? formData.profilePicture
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.displayName.charAt(0))}&background=random&size=150`,
         followerCount: 0,
         followingCount: 0,
         subscriberCount: 0,
-        tier: 'bronze' as const,
+        tier: 'bronze' as const,            
         isLiveStreaming: false,
         walletAddress: walletAddress ?? undefined,
         principal,
       };
       
       setCurrentUser(newUser);
+
+      const avatar = formData.profilePicture
+
+      console.log('avatar :>> ', avatar);
+      console.log('formData :>> ', formData.profilePicture);
       
-      // Create user profile on the backend
+      
       try {
         if (!newAuthActor) {
           console.error('Actor not initialized. Current authentication state:', {
@@ -261,7 +272,8 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
         const result = await newAuthActor.createUser(
           formData.username,
           formData.displayName,
-          formData.email ? [formData.email] : []
+          formData.email ? [formData.email] : [],
+          avatar ? [avatar] : [],
         );
         
         console.log('User profile creation result:', result);
@@ -274,13 +286,33 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
         
         console.log('Profile successfully created:', result.ok);
         
-        if (formData.profilePicture) {
-          // TODO: Implement profile picture upload to backend
-          console.log('Profile picture will be uploaded separately');
+        // Fetch the newly created user data from backend to get the complete profile with converted avatar
+        try {
+          console.log('Fetching newly created user data from backend...');
+          const userData = await getUser(principal);
+          if (userData) {
+            console.log('Setting complete user data from backend:', {
+              username: userData.username,
+              displayName: userData.displayName,
+              hasAvatar: !!userData.avatar,
+              tier: userData.tier
+            });
+            setCurrentUser(userData);
+          } else {
+            console.warn('Could not fetch user data after creation, using local data');
+            // Fallback to the newUser object we created locally
+            setCurrentUser(newUser);
+          }
+        } catch (fetchError) {
+          console.error('Error fetching newly created user:', fetchError);
+          // Fallback to the newUser object we created locally
+          setCurrentUser(newUser);
         }
         
         setAuthenticated(true);
         toast.success('Welcome to FLUX! Your account has been created successfully.');
+        
+        // Complete signup and redirect to home
       } catch (error) {
         console.error('Error creating user profile:', error);
         if (error instanceof Error && error.message.includes('Authentication not complete')) {
@@ -734,7 +766,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
                         <div className="flex justify-between">
                           <span className="text-flux-text-secondary">Wallet:</span>
                           <span className="text-flux-text-primary font-mono text-sm">
-                            {principal?.slice(0, 6)}...{principal?.slice(-4)}
+                            {principal.slice(0, 6)}...{principal.slice(-4)}
                           </span>
                         </div>
                       )}

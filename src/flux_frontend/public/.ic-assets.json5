@@ -24,7 +24,9 @@
             // - Added blob: to img-src for blob URLs support
             // - Added media-src for video/audio content
             // - Added https://images.pexels.com for external image sources
-            "Content-Security-Policy": "default-src 'self';script-src 'self';connect-src 'self' http://localhost:* https://icp0.io https://*.icp0.io https://icp-api.io;img-src 'self' data: blob: https://images.pexels.com https://*.pexels.com;media-src 'self' blob: https://commondatastorage.googleapis.com;style-src * 'unsafe-inline';style-src-elem * 'unsafe-inline';font-src *;object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
+            // - Added blob: to connect-src for blob URL connections (avatar handling, etc.)
+            // - Added data: to connect-src for data URL connections (avatar handling, etc.)
+            "Content-Security-Policy": "default-src 'self';script-src 'self';connect-src 'self' blob: data: http://localhost:* https://icp0.io https://*.icp0.io https://icp-api.io;img-src 'self' data: blob: https://images.pexels.com https://*.pexels.com;media-src 'self' blob: https://commondatastorage.googleapis.com;style-src * 'unsafe-inline';style-src-elem * 'unsafe-inline';font-src *;object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
 
             // Security: The permissions policy enables camera and microphone for streaming functionality
             // Only includes recognized permissions policy features

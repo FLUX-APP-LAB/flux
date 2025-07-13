@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthClient } from "@dfinity/auth-client";
+import { Principal } from "@dfinity/principal";
 import { idlFactory } from '../../../declarations/flux_backend/flux_backend.did.js';
 import { Actor, HttpAgent } from '@dfinity/agent';
 
@@ -19,6 +20,8 @@ interface WalletContextType {
   isLoadingTransactions: boolean;
   getBalance: () => Promise<any>;
   getTransactionHistory: () => Promise<any[]>;
+  getUser: (principal: string) => Promise<any>;
+  refreshCurrentUser: () => Promise<any>;
   purchaseBits: (amount: number) => Promise<boolean>;
   sendGift: (recipient: string, giftType: string, amount: number) => Promise<boolean>;
   cheerWithBits: (streamer: string, amount: number) => Promise<boolean>;
@@ -53,7 +56,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   
   const identityProvider = !isLocal
     ? 'https://identity.ic0.app' 
-    : `http://${import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'vb2j2-fp777-77774-qaafq-cai'}.localhost:4943`;
+    : `http://${import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'uzt4z-lp777-77774-qaabq-cai'}.localhost:4943`;
 
   const defaultOptions = {
     createOptions: {
@@ -114,7 +117,6 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         host: isLocal ? 'http://localhost:4943' : 'https://ic0.app'
       });
       
-      // Fetch root key for local development
       if (isLocal) {
         try {
           console.log('Fetching root key for local development...');
@@ -122,11 +124,10 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
           console.log('Root key fetched successfully');
         } catch (error) {
           console.error('Failed to fetch root key:', error);
-          // Don't fail the whole authentication process if root key fetch fails
         }
       }
 
-      const canisterId = import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 'vpyes-67777-77774-qaaeq-cai';
+      const canisterId = import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 'uxrrr-q7777-77774-qaaaq-cai';
       
       console.log('Creating actor with:', {
         canisterId,
@@ -142,7 +143,6 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       setAuthActor(newAuthActor);
     } catch (error) {
       console.error('Error in handleAuthenticated:', error);
-      // Reset authentication state on error
       setIsAuthenticated(false);
       setIdentity(null);
       setAuthActor(null);
@@ -157,10 +157,12 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
     
     try {
+      console.log('Starting login process...');
       await authClient.login({
         ...defaultOptions.loginOptions,
         onSuccess: async () => {
           try {
+            console.log('Login successful, handling authentication...');
             await handleAuthenticated(authClient);
           } catch (error) {
             console.error('Error handling authentication:', error);
@@ -239,6 +241,94 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   };
 
+  const getUser = async (userPrincipal: string) => {
+    if (!newAuthActor) {
+      console.error('Actor not initialized');
+      return null;
+    }
+    
+    if (!userPrincipal || userPrincipal.trim() === '') {
+      console.error('Invalid principal: empty or null');
+      return null;
+    }
+    
+    try {
+      console.log('Fetching user with principal:', userPrincipal);
+      
+      let principalObj;
+      try {
+        principalObj = Principal.fromText(userPrincipal);
+      } catch (principalError) {
+        console.error('Invalid principal format:', userPrincipal, principalError);
+        return null;
+      }
+      
+      const result = await newAuthActor.getUser(principalObj);
+      
+      if ('ok' in result) {
+        console.log('User found:', result.ok);
+        const backendUser = result.ok;
+        
+        let avatarUrl = '/default-avatar.png';
+        if (backendUser.avatar && backendUser.avatar.length > 0 && backendUser.avatar[0]) {
+          const base64Avatar = backendUser.avatar[0];
+          if (base64Avatar && typeof base64Avatar === 'string') {
+            if (base64Avatar.startsWith('data:image/')) {
+              avatarUrl = base64Avatar;
+            } else {
+              avatarUrl = `data:image/jpeg;base64,${base64Avatar}`;
+            }
+            console.log('Avatar loaded from base64:', avatarUrl.substring(0, 50) + '...');
+          }
+        }
+
+        let bannerUrl;
+        if (backendUser.banner && backendUser.banner.length > 0 && backendUser.banner[0]) {
+          const base64Banner = backendUser.banner[0];
+          if (base64Banner && typeof base64Banner === 'string') {
+            if (base64Banner.startsWith('data:image/')) {
+              bannerUrl = base64Banner;
+            } else {
+              bannerUrl = `data:image/jpeg;base64,${base64Banner}`;
+            }
+            console.log('Banner loaded from base64');
+          }
+        }
+
+        const frontendUser = {
+          id: backendUser.id.toString(),
+          username: backendUser.username,
+          displayName: backendUser.displayName,
+          avatar: avatarUrl,
+          followerCount: backendUser.followers?.length || 0,
+          followingCount: backendUser.following?.length || 0,
+          subscriberCount: backendUser.subscribers?.length || 0,
+          isLiveStreaming: false, 
+          tier: backendUser.tier?.Partner ? 'platinum' : 
+                backendUser.tier?.Creator ? 'gold' : 
+                backendUser.tier?.Premium ? 'silver' : 'bronze' as 'bronze' | 'silver' | 'gold' | 'platinum',
+          banner: bannerUrl,
+          walletAddress: userPrincipal,
+          principal: userPrincipal,
+        };
+        
+        console.log('Frontend user object created:', {
+          username: frontendUser.username,
+          displayName: frontendUser.displayName,
+          avatar: frontendUser.avatar
+        });
+        
+        return frontendUser;
+      } else {
+        console.log('User not found:', result.err);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      return null;
+    }
+  };
+
   const purchaseBits = async (amount: number) => {
     if (!newAuthActor) return false;
     try {
@@ -298,6 +388,29 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     await logout();
   };
 
+  const refreshCurrentUser = async () => {
+    if (!principal || !newAuthActor) {
+      console.log('Cannot refresh user: missing principal or actor');
+      return null;
+    }
+
+    try {
+      const userData = await getUser(principal);
+      if (userData) {
+        console.log('Current user refreshed:', {
+          username: userData.username,
+          hasAvatar: !!userData.avatar,
+          avatarPreview: userData.avatar ? userData.avatar.substring(0, 50) + '...' : 'none'
+        });
+        return userData;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error refreshing current user:', error);
+      return null;
+    }
+  };
+
   const contextValue: WalletContextType = {
     isAuthenticated,
     login,
@@ -313,12 +426,14 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     isLoadingTransactions,
     getBalance,
     getTransactionHistory,
+    getUser,
     purchaseBits,
     sendGift,
     cheerWithBits,
     requestPayout,
     formatWalletAddress,
-    disconnectWallet
+    disconnectWallet,
+    refreshCurrentUser
   };
 
   return (

@@ -19,6 +19,17 @@ import { LandingPage } from './components/auth/LandingPage';
 import { WalletProvider } from './contexts/WalletContext';
 import { useAppStore } from './store/appStore';
 
+// Loading component for authentication initialization
+const AuthLoadingScreen = () => (
+  <div className="min-h-screen bg-flux-bg-primary flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-flux-primary mb-4 mx-auto"></div>
+      <p className="text-flux-text-secondary">Initializing...</p>
+    </div>
+  </div>
+);
+
+// Main app content component that uses wallet context
 function App() {
   const { activePage, theme, isAuthenticated, desktopSidebarCollapsed } = useAppStore();
 

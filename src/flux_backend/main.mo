@@ -103,8 +103,8 @@ actor UserManager {
         username: Text;
         displayName: Text;
         email: ?Text;
-        avatar: ?Blob;
-        banner: ?Blob;
+        avatar: ?Text;
+        banner: ?Text;
         bio: Text;
         location: ?Text;
         website: ?Text;
@@ -212,7 +212,7 @@ actor UserManager {
     };
 
     // Core User Functions
-    public shared(msg) func createUser(username: Text, displayName: Text, email: ?Text) : async Result.Result<User, Text> {
+    public shared(msg) func createUser(username: Text, displayName: Text, email: ?Text, avatar: ?Text) : async Result.Result<User, Text> {
         let caller = msg.caller;
         
         // Validate username
@@ -237,7 +237,7 @@ actor UserManager {
             username = username;
             displayName = displayName;
             email = email;
-            avatar = null;
+            avatar = avatar;
             banner = null;
             bio = "";
             location = null;
@@ -312,7 +312,7 @@ actor UserManager {
         #ok(newUser)
     };
 
-    public shared(msg) func updateProfile(displayName: ?Text, bio: ?Text, avatar: ?Blob, banner: ?Blob, socialLinks: ?SocialLinks) : async Result.Result<User, Text> {
+    public shared(msg) func updateProfile(displayName: ?Text, bio: ?Text, avatar: ?Text, banner: ?Text, socialLinks: ?SocialLinks) : async Result.Result<User, Text> {
         let caller = msg.caller;
         
         switch (users.get(caller)) {
@@ -321,7 +321,7 @@ actor UserManager {
                     user with
                     displayName = switch (displayName) { case (?name) name; case null user.displayName };
                     bio = switch (bio) { case (?newBio) newBio; case null user.bio };
-                    avatar = switch (avatar) { case (?newAvatar) ?newAvatar; case null user.avatar };
+                    avatar = switch (avatar) { case (?newAvatar) ?newAvatar; case null user.avatar }; 
                     banner = switch (banner) { case (?newBanner) ?newBanner; case null user.banner };
                     socialLinks = switch (socialLinks) { case (?links) links; case null user.socialLinks };
                     lastActive = Time.now();

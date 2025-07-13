@@ -5,40 +5,58 @@ import { Button } from '../ui/Button';
 import { SignupPage } from './SignupPage';
 import { useAppStore } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
-import { generateMockData } from '../../lib/utils';
 import toast from 'react-hot-toast';
 
 export const LandingPage: React.FC = () => {
   const [showSignup, setShowSignup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { setCurrentUser, setAuthenticated } = useAppStore();
-  const { login, isAuthenticated, principal } = useWallet();
+  const { login, isAuthenticated, principal, getUser } = useWallet();
 
   const connectWallet = async () => {
     setIsLoading(true);
     try {
       await login();
       
-      if (isAuthenticated) {
+      if (isAuthenticated && principal) {
         toast.success(`Wallet connected! ${principal?.slice(0, 6)}...${principal?.slice(-4)}`);
         
-        // Check if this wallet has an existing account (simulate database lookup)
-        const hasExistingAccount = Math.random() > 0.7; // 30% chance of existing account
+        await new Promise(resolve => setTimeout(resolve, 500));
         
-        if (hasExistingAccount) {
-          // Existing user - log them in directly
-          const { mockUsers } = generateMockData();
-          const existingUser = {
-            ...mockUsers[0],
-            walletAddress: principal || undefined,
-            principal,
-          };
-          setCurrentUser(existingUser);
-          setAuthenticated(true);
-          toast.success(`Welcome back!`);
-        } else {
-          // New wallet - redirect to signup
-          toast('Complete your profile to get started', { icon: '👋' });
+        try {
+          const existingUser = await getUser(principal);
+          
+          if (existingUser) {
+            // Set the fetched user data including the avatar
+            setCurrentUser(existingUser);
+            setAuthenticated(true);
+            toast.success(`Welcome back, ${existingUser.displayName || existingUser.username}!`);
+            
+            // Detailed console logging for avatar/profile picture
+            console.log('User loaded with complete profile data:', {
+              username: existingUser.username,
+              displayName: existingUser.displayName,
+              id: existingUser.id,
+              principal: existingUser.principal,
+              hasAvatar: !!existingUser.avatar,
+              avatarLength: existingUser.avatar ? existingUser.avatar.length : 0,
+              avatarType: existingUser.avatar ? (existingUser.avatar.startsWith('data:') ? 'data URL' : 'blob URL') : 'none',
+              avatarPreview: existingUser.avatar ? existingUser.avatar.substring(0, 100) + '...' : 'none'
+            });
+            
+            // Specifically log the profile picture value being set
+            console.log('Profile picture set to:', existingUser.avatar || 'No avatar available');
+            
+            // Log the complete user object structure for debugging
+            console.log('Complete user object:', existingUser);
+          } else {
+            console.log('No existing user found for principal:', principal);
+            toast('Complete your profile to get started', { icon: '👋' });
+            setShowSignup(true);
+          }
+        } catch (userFetchError) {
+          console.error('Error fetching user data:', userFetchError);
+          toast('Unable to verify existing account. Let\'s create your profile!', { icon: '🚀' });
           setShowSignup(true);
         }
       } else {
@@ -85,22 +103,17 @@ export const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Hero Background Image */}
       <div className="absolute inset-0">
         <img
           src="/17517500282326374985607665398759.jpg"
           alt="Gaming Setup"
           className="w-full h-full object-cover"
         />
-        {/* Dark overlay for better text readability */}
         <div className="absolute inset-0 bg-black/70" />
-        {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-flux-primary/30 via-transparent to-flux-accent-purple/30" />
       </div>
 
-      {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
-        {/* Floating Gaming Icons */}
         {[
           { icon: Gamepad2, delay: 0, x: '10%', y: '20%' },
           { icon: Headphones, delay: 1, x: '85%', y: '15%' },
@@ -127,7 +140,6 @@ export const LandingPage: React.FC = () => {
           </motion.div>
         ))}
 
-        {/* Floating Particles */}
         {[...Array(15)].map((_, i) => (
           <motion.div
             key={i}
@@ -172,10 +184,8 @@ export const LandingPage: React.FC = () => {
           </div>
         </motion.header>
 
-        {/* Main Hero Content */}
         <div className="flex-1 flex items-center justify-center px-6">
           <div className="max-w-4xl mx-auto text-center">
-            {/* Hero Text */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -207,7 +217,6 @@ export const LandingPage: React.FC = () => {
                 Connect your wallet and start earning crypto rewards for your content.
               </motion.p>
 
-              {/* CTA Button */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -234,7 +243,6 @@ export const LandingPage: React.FC = () => {
                   Secure Web3 connection • No fees to join • Start earning today
                 </motion.p>
 
-                {/* Wallet Connection Info */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -264,7 +272,6 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Features Section */}
         <motion.section
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}

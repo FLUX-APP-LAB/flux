@@ -3,6 +3,7 @@ import { AuthClient } from "@dfinity/auth-client";
 import { Principal } from "@dfinity/principal";
 import { idlFactory } from '../../../declarations/flux_backend/flux_backend.did.js';
 import { Actor, HttpAgent } from '@dfinity/agent';
+import { useAppStore } from '../store/appStore';
 
 interface WalletContextType {
   isAuthenticated: boolean;
@@ -21,6 +22,7 @@ interface WalletContextType {
   getBalance: () => Promise<any>;
   getTransactionHistory: () => Promise<any[]>;
   getUser: (principal: string) => Promise<any>;
+  fetchAndSetCurrentUser: (principal: string) => Promise<any>;
   refreshCurrentUser: () => Promise<any>;
   purchaseBits: (amount: number) => Promise<boolean>;
   sendGift: (recipient: string, giftType: string, amount: number) => Promise<boolean>;
@@ -28,6 +30,19 @@ interface WalletContextType {
   requestPayout: (amount: number) => Promise<string | null>;
   formatWalletAddress: (address?: string) => string;
   disconnectWallet: () => Promise<void>;
+  updateProfile: (data: {
+    displayName?: string;
+    bio?: string;
+    avatar?: string;
+    banner?: string;
+    socialLinks?: {
+      discord?: string;
+      instagram?: string;
+      twitter?: string;
+      website?: string;
+      youtube?: string;
+    };
+  }) => Promise<any>;
 }
 
 export const WalletContext = createContext<WalletContextType | null>(null);
@@ -68,6 +83,15 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       identityProvider,
       maxTimeToLive: days * hours * nanoSeconds,
     },
+  };
+
+  const { setCurrentUser } = useAppStore();
+
+  // Helper to fetch and set current user in store
+  const fetchAndSetCurrentUser = async (userPrincipal: string) => {
+    const user = await getUser(userPrincipal);
+    if (user) setCurrentUser(user);
+    return user;
   };
 
   useEffect(() => {
@@ -141,6 +165,15 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       });
       console.log('newAuthActor created successfully');
       setAuthActor(newAuthActor);
+
+      // Fetch and set user profile in global store
+      if (typeof fetchAndSetCurrentUser === 'function') {
+        try {
+          await fetchAndSetCurrentUser(principalIdFull);
+        } catch (e) {
+          console.error('Failed to fetch user profile after authentication:', e);
+        }
+      }
     } catch (error) {
       console.error('Error in handleAuthenticated:', error);
       setIsAuthenticated(false);
@@ -310,6 +343,13 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
           banner: bannerUrl,
           walletAddress: userPrincipal,
           principal: userPrincipal,
+          bio: Array.isArray(backendUser.bio) ? backendUser.bio[0] || '' : backendUser.bio || '',
+          location: backendUser.location?.[0] || '',
+          website: Array.isArray(backendUser.socialLinks?.website)
+            ? backendUser.socialLinks.website.filter(Boolean)
+            : backendUser.socialLinks?.website
+              ? [backendUser.socialLinks.website]
+              : [],
         };
         
         console.log('Frontend user object created:', {
@@ -411,6 +451,56 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   };
 
+  const updateProfile = async ({ displayName, bio, avatar, banner, socialLinks }: {
+    displayName?: string;
+    bio?: string;
+    avatar?: string;
+    banner?: string;
+    socialLinks?: {
+      discord?: string;
+      instagram?: string;
+      twitter?: string;
+      website?: string;
+      youtube?: string;
+    };
+  }) => {
+    if (!newAuthActor) {
+      console.error('Actor not initialized');
+      return null;
+    }
+    try {
+      // Convert empty strings to undefined for optional candid fields
+      const opt = (val: any) => (val ? [val] : []);
+      const optLinks = (links: any) => {
+        if (!links) return [];
+        return [{
+          discord: links.discord ? [links.discord] : [],
+          instagram: links.instagram ? [links.instagram] : [],
+          twitter: links.twitter ? [links.twitter] : [],
+          website: links.website ? [links.website] : [],
+          youtube: links.youtube ? [links.youtube] : [],
+        }];
+      };
+      const result = await newAuthActor.updateProfile(
+        opt(displayName),
+        opt(bio),
+        opt(avatar),
+        opt(banner),
+        optLinks(socialLinks)
+      );
+      if ('ok' in result) {
+        console.log('Profile updated:', result.ok);
+        return result.ok;
+      } else {
+        console.error('Profile update error:', result.err);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      return null;
+    }
+  };
+
   const contextValue: WalletContextType = {
     isAuthenticated,
     login,
@@ -427,13 +517,15 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     getBalance,
     getTransactionHistory,
     getUser,
+    fetchAndSetCurrentUser,
     purchaseBits,
     sendGift,
     cheerWithBits,
     requestPayout,
     formatWalletAddress,
     disconnectWallet,
-    refreshCurrentUser
+    refreshCurrentUser,
+    updateProfile,
   };
 
   return (

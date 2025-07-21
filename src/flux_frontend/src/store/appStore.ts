@@ -13,6 +13,16 @@ export interface User {
   banner?: string;
   walletAddress?: string;
   principal?: string;
+  bio?: string;
+  website?: string[]; // changed from string to string[]
+  location?: string;
+  socialLinks?: {
+    twitter?: string[];
+    instagram?: string[];
+    website?: string[];
+    discord?: string[];
+    youtube?: string[];
+  };
 }
 
 export interface Video {

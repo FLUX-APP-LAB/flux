@@ -7,6 +7,8 @@ import { EditProfileModal } from '../profile/EditProfileModal';
 import { useAppStore } from '../../store/appStore';
 import { generateMockData, formatNumber } from '../../lib/utils';
 import { User, Video, LiveStream } from '../../store/appStore';
+import { useWallet } from '../../hooks/useWallet';
+
 
 export const UserProfile: React.FC = () => {
   const { currentUser, setActivePage } = useAppStore();
@@ -14,22 +16,43 @@ export const UserProfile: React.FC = () => {
   const [userVideos, setUserVideos] = useState<Video[]>([]);
   const [userStreams, setUserStreams] = useState<LiveStream[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [profileUser, setProfileUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { walletAddress, fetchAndSetCurrentUser } = useWallet();
 
-  // Use current user if available, otherwise show mock profile
-  const profileUser: User = currentUser || {
-    id: '1',
-    username: 'techcreator',
-    displayName: 'Tech Creator',
-    avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
-    banner: 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=800&h=300&fit=crop',
-    followerCount: 125000,
-    followingCount: 250,
-    subscriberCount: 45000,
-    tier: 'gold',
-    isLiveStreaming: false,
-  };
+  useEffect(() => {
+    const fetchUser = async () => {
+      setLoading(true);
+      setError(null);
+      if (currentUser) {
+        setProfileUser(currentUser);
+        setLoading(false);
+      } else if (walletAddress) {
+        try {
+          const user = await fetchAndSetCurrentUser(walletAddress);
+          if (user) {
+            setProfileUser(user);
+          } else {
+            setProfileUser(null);
+            setError('User not found.');
+          }
+        } catch (e) {
+          setProfileUser(null);
+          setError('Failed to fetch user.');
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setProfileUser(null);
+        setError('User not found.');
+        setLoading(false);
+      }
+    };
+    fetchUser();
+  }, [currentUser, walletAddress, fetchAndSetCurrentUser]);
 
-  const isOwnProfile = currentUser?.id === profileUser.id;
+  const isOwnProfile = currentUser?.id === profileUser?.id;
 
   useEffect(() => {
     const { mockVideos, mockStreams } = generateMockData();
@@ -42,6 +65,30 @@ export const UserProfile: React.FC = () => {
     { id: 'streams' as const, label: 'Streams', count: userStreams.length },
     { id: 'about' as const, label: 'About' },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-flux-bg-primary">
+        <span className="text-flux-text-secondary text-lg">Loading profile...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-flux-bg-primary">
+        <span className="text-flux-accent-red text-lg">{error}</span>
+      </div>
+    );
+  }
+
+  if (!profileUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-flux-bg-primary">
+        <span className="text-flux-text-secondary text-lg">User not found.</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-flux-bg-primary">
@@ -65,7 +112,7 @@ export const UserProfile: React.FC = () => {
       {/* Profile Banner */}
       <div className="relative h-64 overflow-hidden">
         <img
-          src={profileUser.banner}
+          src={profileUser?.banner}
           alt="Profile banner"
           className="w-full h-full object-cover"
         />
@@ -77,17 +124,17 @@ export const UserProfile: React.FC = () => {
         <div className="flex items-end justify-between mb-4">
           <div className="flex items-end space-x-4">
             <Avatar
-              src={profileUser.avatar}
-              alt={profileUser.displayName}
+              src={profileUser?.avatar || ''}
+              alt={profileUser?.displayName || ''}
               size="xl"
-              isLive={profileUser.isLiveStreaming}
-              tier={profileUser.tier}
+              isLive={profileUser?.isLiveStreaming}
+              tier={profileUser?.tier}
             />
             <div className="pb-2">
               <h1 className="text-2xl font-bold text-flux-text-primary">
-                {profileUser.displayName}
+                {profileUser?.displayName}
               </h1>
-              <p className="text-flux-text-secondary">@{profileUser.username}</p>
+              <p className="text-flux-text-secondary">@{profileUser?.username}</p>
             </div>
           </div>
 
@@ -118,19 +165,19 @@ export const UserProfile: React.FC = () => {
         <div className="flex items-center space-x-6 mb-6">
           <div className="text-center">
             <p className="text-xl font-bold text-flux-text-primary">
-              {formatNumber(profileUser.followerCount || 0)}
+              {formatNumber(profileUser?.followerCount || 0)}
             </p>
             <p className="text-flux-text-secondary text-sm">Followers</p>
           </div>
           <div className="text-center">
             <p className="text-xl font-bold text-flux-text-primary">
-              {formatNumber(profileUser.followingCount || 0)}
+              {formatNumber(profileUser?.followingCount || 0)}
             </p>
             <p className="text-flux-text-secondary text-sm">Following</p>
           </div>
           <div className="text-center">
             <p className="text-xl font-bold text-flux-text-primary">
-              {formatNumber(profileUser.subscriberCount || 0)}
+              {formatNumber(profileUser?.subscriberCount || 0)}
             </p>
             <p className="text-flux-text-secondary text-sm">Subscribers</p>
           </div>
@@ -139,11 +186,17 @@ export const UserProfile: React.FC = () => {
         {/* Bio */}
         <div className="mb-6">
           <p className="text-flux-text-primary">
-            🎥 Content creator passionate about technology and innovation
+            {profileUser?.bio || ''}
           </p>
-          <p className="text-flux-text-primary">
-            📧 Business inquiries: hello@techcreator.com
-          </p>
+          {Array.isArray(profileUser?.website) && profileUser.website.filter(site => typeof site === 'string' && site.trim().length > 0).length > 0 && (
+            <span className="text-flux-text-primary block mt-2">
+              {profileUser.website.filter(site => typeof site === 'string' && site.trim().length > 0).map((site, idx, arr) => (
+                <span key={site}>
+                  🌐 website: <a href={site} target="_blank" rel="noopener noreferrer" className="underline text-flux-primary">{site}</a>{idx < arr.length - 1 ? ', ' : ''}
+                </span>
+              ))}
+            </span>
+          )}
         </div>
 
         {/* Tabs */}

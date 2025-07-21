@@ -300,19 +300,16 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
             setCurrentUser(userData);
           } else {
             console.warn('Could not fetch user data after creation, using local data');
-            // Fallback to the newUser object we created locally
             setCurrentUser(newUser);
           }
         } catch (fetchError) {
           console.error('Error fetching newly created user:', fetchError);
-          // Fallback to the newUser object we created locally
           setCurrentUser(newUser);
         }
         
         setAuthenticated(true);
         toast.success('Welcome to FLUX! Your account has been created successfully.');
         
-        // Complete signup and redirect to home
       } catch (error) {
         console.error('Error creating user profile:', error);
         if (error instanceof Error && error.message.includes('Authentication not complete')) {

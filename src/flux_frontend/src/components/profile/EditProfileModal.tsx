@@ -5,6 +5,8 @@ import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { useAppStore } from '../../store/appStore';
 import toast from 'react-hot-toast';
+import { useWallet } from '../../hooks/useWallet';
+
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -16,14 +18,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   onClose,
 }) => {
   const { currentUser, setCurrentUser } = useAppStore();
+  const { updateProfile } = useWallet();
   const [formData, setFormData] = useState({
     displayName: currentUser?.displayName || '',
     username: currentUser?.username || '',
-    bio: 'Passionate content creator exploring the latest in technology and innovation. Join me on this journey!',
-    location: 'San Francisco, CA',
-    website: 'https://techcreator.com',
+    bio: currentUser?.bio || '',
+    location: currentUser?.location || '',
+    website: currentUser?.website || '',
     avatar: currentUser?.avatar || '',
-    banner: currentUser?.banner || 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=800&h=300&fit=crop',
+    banner: currentUser?.banner || '',
   });
   const [privacySettings, setPrivacySettings] = useState({
     isPrivateAccount: false,
@@ -66,12 +69,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           return;
         }
 
-        // Simulate upload progress
         await new Promise(resolve => setTimeout(resolve, 1500));
         
-        // Create object URL for preview
-        const imageUrl = URL.createObjectURL(file);
-        setFormData(prev => ({ ...prev, [type]: imageUrl }));
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          setFormData(prev => ({ ...prev, [type]: base64String }));
+        };
+        reader.readAsDataURL(file);
       } else {
         // Generate a random image from Pexels
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -111,24 +116,39 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   const handleSave = async () => {
     setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    if (currentUser) {
-      const updatedUser = {
-        ...currentUser,
+    try {
+      const socialLinks = {
+        website: Array.isArray(formData.website) ? formData.website[0] : formData.website || undefined,
+      };
+      
+      const result = await updateProfile({
         displayName: formData.displayName,
-        username: formData.username,
+        bio: formData.bio,
         avatar: formData.avatar,
         banner: formData.banner,
-      };
-      setCurrentUser(updatedUser);
+        socialLinks,
+      });
+      if (result) {
+        toast.success('Profile updated successfully!');
+        if (currentUser) {
+          setCurrentUser({
+            ...currentUser,
+            displayName: formData.displayName,
+            avatar: formData.avatar,
+            banner: formData.banner,
+            bio: formData.bio,
+            website: Array.isArray(formData.website) ? formData.website : formData.website ? [formData.website] : [],
+          });
+        }
+        onClose();
+      } else {
+        toast.error('Failed to update profile');
+      }
+    } catch (error) {
+      toast.error('Error updating profile');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
-    toast.success('Profile updated successfully!');
-    onClose();
   };
 
   if (!isOpen) return null;

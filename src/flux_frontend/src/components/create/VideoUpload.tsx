@@ -4,6 +4,7 @@ import { Upload, Play, Pause, Volume2, VolumeX, X, Hash, AtSign } from 'lucide-r
 import { Button } from '../ui/Button';
 import { useAppStore } from '../../store/appStore';
 import toast from 'react-hot-toast';
+import { useWallet } from '../../hooks/useWallet';
 
 interface VideoUploadProps {
   onClose: () => void;
@@ -23,6 +24,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { currentUser, videoFeed, setVideoFeed } = useAppStore();
+  const { newAuthActor, principal } = useWallet();
 
   const handleFileSelect = useCallback((file: File) => {
     if (file && file.type.startsWith('video/')) {
@@ -63,45 +65,196 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
     }
   };
 
-  const simulateUpload = async () => {
+  const uploadVideo = async () => {
+    if (!selectedFile) {
+      toast.error('No video file selected');
+      return;
+    }
+    if (!newAuthActor) {
+      toast.error('Not connected to backend. Please connect your wallet.');
+      return;
+    }
+    if (!principal) {
+      toast.error('No principal found. Please connect your wallet.');
+      return;
+    }
+    
     setIsUploading(true);
     setUploadProgress(0);
-
-    // Simulate upload progress
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      setUploadProgress(i);
-    }
-
-    // Create new video object
-    const newVideo = {
-      id: Date.now().toString(),
-      title: title || 'Untitled Video',
-      thumbnail: videoPreview || 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=400&h=600&fit=crop',
-      videoUrl: videoPreview || 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4',
-      creator: currentUser!,
-      views: 0,
-      likes: 0,
-      duration: 180,
-      isLiked: false,
-      description,
-      hashtags: hashtags.split(' ').filter(tag => tag.startsWith('#')),
-    };
-
-    // Add to feed
-    setVideoFeed([newVideo, ...videoFeed]);
     
-    setIsUploading(false);
-    toast.success('Video uploaded successfully!');
-    onClose();
+    try {
+      // Read file as ArrayBuffer
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      // Convert to Uint8Array for candid blob - this becomes videoData
+      const videoData = new Uint8Array(arrayBuffer);
+
+      // Generate thumbnail from first frame
+      const generateThumbnail = async (videoUrl: string): Promise<Uint8Array> => {
+        return new Promise((resolve, reject) => {
+          const video = document.createElement('video');
+          video.src = videoUrl;
+          video.crossOrigin = 'anonymous';
+          video.muted = true;
+          video.playsInline = true;
+          video.currentTime = 0.5; // Seek to 0.5 seconds for better frame
+          
+          video.addEventListener('loadeddata', () => {
+            // Set canvas size to video size (or limit max size for performance)
+            const canvas = document.createElement('canvas');
+            const maxSize = 400; // Smaller thumbnail for better performance
+            const aspectRatio = video.videoWidth / video.videoHeight;
+            
+            if (video.videoWidth > video.videoHeight) {
+              canvas.width = Math.min(maxSize, video.videoWidth);
+              canvas.height = canvas.width / aspectRatio;
+            } else {
+              canvas.height = Math.min(maxSize, video.videoHeight);
+              canvas.width = canvas.height * aspectRatio;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject('Canvas context error');
+            
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            canvas.toBlob((blob) => {
+              if (!blob) return reject('Thumbnail blob error');
+              
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                // Convert to Uint8Array for Motoko Blob
+                const arrayBuffer = reader.result as ArrayBuffer;
+                const uint8Array = new Uint8Array(arrayBuffer);
+                resolve(uint8Array);
+              };
+              reader.onerror = () => reject('Thumbnail read error');
+              reader.readAsArrayBuffer(blob);
+            }, 'image/jpeg', 0.8);
+          });
+          
+          video.onerror = () => reject('Video load error');
+          
+          // Set a timeout in case video doesn't load
+          setTimeout(() => reject('Video load timeout'), 10000);
+        });
+      };
+
+      let thumbnail: Uint8Array | null = null;
+      if (videoPreview) {
+        try {
+          thumbnail = await generateThumbnail(videoPreview);
+        } catch (err) {
+          console.warn('Thumbnail generation failed:', err);
+          thumbnail = null;
+        }
+      }
+
+      setUploadProgress(30);
+
+      // Prepare video metadata according to your Motoko type
+      const videoMetadata = {
+        duration: 0, // You might want to get actual video duration
+        resolution: "720p", // Default or detect from video
+        format: selectedFile.type,
+        fileSize: selectedFile.size,
+        fps: 30, // Default or detect
+        bitrate: 0, // Default or calculate
+        aspectRatio: "16:9", // Default or detect
+        codec: "h264" // Default
+      };
+
+      const analytics = {
+        views: 0,
+        likes: 0,
+        dislikes: 0,
+        shares: 0,
+        comments: 0,
+        watchTime: 0,
+        engagement: 0.0,
+        impressions: 0,
+        clickThroughRate: 0.0,
+        demographics: [],
+        trafficSources: [],
+        retentionGraph: []
+      };
+
+      // Parse hashtags properly
+      const hashtagsArr = hashtags
+        .split(/\s+/)
+        .filter(tag => tag.startsWith('#') && tag.length > 1)
+        .map(tag => tag.substring(1)); // Remove # symbol
+
+      const videoType = { Short: null }; // Or whatever your VideoType variants are
+      const category = { Entertainment: null }; // Adjust based on your VideoCategory variants
+      const tags: string[] = []; // You might want to add a tags input field
+
+      setUploadProgress(50);
+      
+      // Call backend with individual parameters matching the Video type structure
+      // Instead of passing an object, pass each parameter separately
+      let result;
+      try {
+        result = await newAuthActor.uploadVideo(
+          title,                    // title: Text
+          description,             // description: Text
+          videoData,               // videoData: Blob
+          thumbnail,               // thumbnail: ?Blob
+          videoType,               // videoType: VideoType
+          category,                // category: VideoCategory
+          tags,                    // tags: [Text]
+          hashtagsArr,             // hashtags: [Text]
+          {
+            ageRestricted: false,
+            allowComments: true,
+            allowDuets: false,
+            allowRemix: false,
+            isMonetized: false,
+            isPrivate: false,
+            isUnlisted: false,
+            scheduledAt: null
+          }
+        );
+      } catch (err) {
+        console.error('Upload call error:', err);
+        if (err instanceof TypeError && err.message.includes('NetworkError')) {
+          toast.error('Network error: Check backend CORS settings.');
+        } else if (err && typeof err === 'object' && 'message' in err) {
+          toast.error('Upload failed: ' + err.message);
+        } else {
+          toast.error('Upload failed: Unknown error');
+        }
+        throw err;
+      }
+      
+      setUploadProgress(100);
+      
+      if (result && ('ok' in result || 'Ok' in result)) {
+        toast.success('Video uploaded successfully!');
+        // Clean up preview URL
+        if (videoPreview) {
+          URL.revokeObjectURL(videoPreview);
+        }
+        setSelectedFile(null);
+        setVideoPreview(null);
+        onClose();
+      } else {
+        const errorMsg = result?.err || result?.Err || 'Unknown error';
+        toast.error('Upload failed: ' + errorMsg);
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      // Error already handled in the try block
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const removeVideo = () => {
-    setSelectedFile(null);
-    setVideoPreview(null);
     if (videoPreview) {
       URL.revokeObjectURL(videoPreview);
     }
+    setSelectedFile(null);
+    setVideoPreview(null);
   };
 
   return (
@@ -254,7 +407,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
               Cancel
             </Button>
             <Button
-              onClick={simulateUpload}
+              onClick={uploadVideo}
               disabled={isUploading || !title.trim()}
               isLoading={isUploading}
               className="flex-1"

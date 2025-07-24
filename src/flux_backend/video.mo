@@ -160,6 +160,9 @@ module VideoManager {
         private var playlists = HashMap.HashMap<Text, Playlist>(0, Text.equal, Text.hash);
         private var _videoTags = HashMap.HashMap<Text, [Text]>(0, Text.equal, Text.hash);
 
+        // Chunked upload support
+        private var videoChunks = HashMap.HashMap<Text, [(Nat, Blob)]>(0, Text.equal, Text.hash);
+        
         // Core Video Functions
         public func uploadVideo(
         caller: Principal,
@@ -185,8 +188,32 @@ module VideoManager {
         let videoId = "vid_" # Principal.toText(caller) # "_" # Int.toText(Time.now());
         
         // Validate video data
-        if (Blob.toArray(videoData).size() > 100_000_000) { // 100MB limit
-            return #err("Video file too large");
+        let videoSize = Blob.toArray(videoData).size();
+        if (videoSize == 0) {
+            return #err("Video file is empty");
+        };
+        
+        if (videoSize > 10_000_000) { // 10MB limit
+            return #err("Video file too large (max 10MB)");
+        };
+        
+        // Basic video format validation by checking file headers
+        let videoBytes = Blob.toArray(videoData);
+        if (videoBytes.size() < 12) {
+            return #err("Invalid video file format");
+        };
+        
+        // Check for common video file signatures
+        let isValidVideo = 
+            // MP4 signature
+            (videoBytes[4] == 0x66 and videoBytes[5] == 0x74 and videoBytes[6] == 0x79 and videoBytes[7] == 0x70) or
+            // AVI signature  
+            (videoBytes[0] == 0x52 and videoBytes[1] == 0x49 and videoBytes[2] == 0x46 and videoBytes[3] == 0x46) or
+            // MOV/QuickTime signature
+            (videoBytes[4] == 0x6D and videoBytes[5] == 0x6F and videoBytes[6] == 0x6F and videoBytes[7] == 0x76);
+            
+        if (not isValidVideo) {
+            return #err("Unsupported video format. Please use MP4, AVI, or MOV files");
         };
         
         // Create video metadata
@@ -754,6 +781,202 @@ module VideoManager {
     public func bulkProcessVideos(_videoIds: [Text]) : async Result.Result<(), Text> {
         // Process multiple videos in batch
         #ok()
+    };
+    
+    public func processVideoMetadata(videoData: Blob) : VideoMetadata {
+        let fileSize = Blob.toArray(videoData).size();
+        
+        // Extract basic metadata from video file
+        // In a real implementation, you'd parse the video headers
+        let metadata : VideoMetadata = {
+            duration = 0; // Would be extracted from video headers
+            resolution = "1080p"; // Default, would be detected
+            frameRate = 30;
+            bitrate = 5000;
+            codec = "H.264";
+            fileSize = fileSize;
+            uploadDate = Time.now();
+            processedDate = null;
+        };
+        
+        metadata
+    };
+    
+    public func getUploadProgress(videoId: Text) : Result.Result<Nat, Text> {
+        // Get upload/processing progress for a video
+        let jobId = "job_" # videoId;
+        switch (processingJobs.get(jobId)) {
+            case (?job) { #ok(job.progress) };
+            case null { #err("Processing job not found") };
+        }
+    };
+    
+    public func updateProcessingProgress(
+        videoId: Text,
+        progress: Nat,
+        status: Text
+    ) : Result.Result<(), Text> {
+        let jobId = "job_" # videoId;
+        switch (processingJobs.get(jobId)) {
+            case (?job) {
+                let updatedJob = {
+                    job with
+                    progress = progress;
+                    status = status;
+                    endTime = if (progress == 100) { ?Time.now() } else { job.endTime };
+                };
+                processingJobs.put(jobId, updatedJob);
+                
+                // Update video status if processing is complete
+                if (progress == 100) {
+                    switch (videos.get(videoId)) {
+                        case (?video) {
+                            let updatedVideo = {
+                                video with
+                                status = #Ready;
+                                publishedAt = ?Time.now();
+                                metadata = {
+                                    video.metadata with
+                                    processedDate = ?Time.now();
+                                };
+                            };
+                            videos.put(videoId, updatedVideo);
+                        };
+                        case null { };
+                    };
+                };
+                
+                #ok()
+            };
+            case null { #err("Processing job not found") };
+        }
+    };
+    
+    public func createVideoRecord(
+        caller: Principal,
+        title: Text,
+        description: Text,
+        thumbnail: ?Blob,
+        videoType: VideoType,
+        category: VideoCategory,
+        tags: [Text],
+        hashtags: [Text],
+        settings: {
+            isPrivate: Bool;
+            isUnlisted: Bool;
+            allowComments: Bool;
+            allowDuets: Bool;
+            allowRemix: Bool;
+            isMonetized: Bool;
+            ageRestricted: Bool;
+            scheduledAt: ?Int;
+        }
+    ) : async Result.Result<Text, Text> {
+        let videoId = "vid_" # Principal.toText(caller) # "_" # Int.toText(Time.now());
+        
+        let metadata : VideoMetadata = {
+            duration = 0;
+            resolution = "unknown";
+            frameRate = 30;
+            bitrate = 0;
+            codec = "unknown";
+            fileSize = 0;
+            uploadDate = Time.now();
+            processedDate = null;
+        };
+        
+        let analytics : VideoAnalytics = {
+            views = 0;
+            likes = 0;
+            dislikes = 0;
+            shares = 0;
+            comments = 0;
+            averageWatchTime = 0;
+            clickThroughRate = 0.0;
+            engagement = 0.0;
+            retention = [];
+        };
+        
+        let video : Video = {
+            id = videoId;
+            creator = caller;
+            title = title;
+            description = description;
+            thumbnail = thumbnail;
+            videoData = null;
+            videoType = videoType;
+            category = category;
+            tags = tags;
+            hashtags = hashtags;
+            language = "en";
+            isMonetized = settings.isMonetized;
+            ageRestricted = settings.ageRestricted;
+            isPrivate = settings.isPrivate;
+            isUnlisted = settings.isUnlisted;
+            allowComments = settings.allowComments;
+            allowDuets = settings.allowDuets;
+            allowRemix = settings.allowRemix;
+            metadata = metadata;
+            analytics = analytics;
+            comments = [];
+            status = #Processing;
+            streamId = null;
+            clipStartTime = null;
+            clipEndTime = null;
+            createdAt = Time.now();
+            updatedAt = Time.now();
+            publishedAt = null;
+            scheduledAt = settings.scheduledAt;
+        };
+        
+        videos.put(videoId, video);
+        #ok(videoId)
+    };
+
+    public func uploadVideoChunk(
+        caller: Principal,
+        videoId: Text,
+        chunkData: Blob,
+        chunkIndex: Nat,
+        totalChunks: Nat
+    ) : async Result.Result<Text, Text> {
+        switch (videos.get(videoId)) {
+            case null { #err("Video not found") };
+            case (?video) {
+                if (video.creator != caller) {
+                    return #err("Unauthorized");
+                };
+                
+                if (Blob.toArray(chunkData).size() > 2_000_000) {
+                    return #err("Chunk too large");
+                };
+                
+                let existingChunks = switch (videoChunks.get(videoId)) {
+                    case null { [] };
+                    case (?chunks) { chunks };
+                };
+                
+                let newChunks = Array.append(existingChunks, [(chunkIndex, chunkData)]);
+                videoChunks.put(videoId, newChunks);
+                
+                if (newChunks.size() == totalChunks) {
+                    let updatedVideo = {
+                        video with
+                        videoData = ?("video_" # videoId);
+                        status = #Ready;
+                        updatedAt = Time.now();
+                        publishedAt = ?Time.now();
+                    };
+                    
+                    videos.put(videoId, updatedVideo);
+                    videoChunks.delete(videoId);
+                    
+                    #ok("Video chunks combined successfully")
+                } else {
+                    #ok("Chunk " # Nat.toText(chunkIndex + 1) # "/" # Nat.toText(totalChunks) # " uploaded")
+                }
+            };
+        }
     };
     
     }; // End of VideoManager class

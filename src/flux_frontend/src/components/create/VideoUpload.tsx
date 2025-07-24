@@ -16,7 +16,6 @@ import {
   VideoUploadData 
 } from '../../lib/videoUtils';
 import toast from 'react-hot-toast';
-import { useWallet } from '../../hooks/useWallet';
 
 interface VideoUploadProps {
   onClose: () => void;
@@ -45,7 +44,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { currentUser, videoFeed, setVideoFeed } = useAppStore();
 
-  const { newAuthActor } = useWallet();
+  // const { newAuthActor } = useWallet();
 
   const { newAuthActor, principal } = useWallet();
 
@@ -320,6 +319,8 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
       
       toast.error(errorMessage);
       console.error('Upload error:', error);
+    }
+  };
 
   const uploadVideo = async () => {
     if (!selectedFile) {
@@ -698,7 +699,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
                 <Button
                   onClick={onClose}
                   className="px-8"
-                  variant={uploadStatus === 'error' ? 'secondary' : 'default'}
+                  variant={uploadStatus === 'error' ? 'secondary' : 'primary'}
                 >
                   {uploadStatus === 'complete' ? 'Done' : 'Close'}
                 </Button>
@@ -924,7 +925,6 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             </Button>
             <Button
               onClick={uploadToBackend}
-              onClick={uploadVideo}
               disabled={isUploading || !title.trim()}
               isLoading={isUploading}
               className="flex-1"

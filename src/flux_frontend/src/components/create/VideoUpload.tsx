@@ -85,8 +85,8 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
     try {
       // Read file as ArrayBuffer
       const arrayBuffer = await selectedFile.arrayBuffer();
-      // Convert to Uint8Array for candid blob - this becomes videoData
-      const videoData = new Uint8Array(arrayBuffer);
+      // Convert to regular array for Candid compatibility
+      const videoData = Array.from(new Uint8Array(arrayBuffer));
 
       // Generate thumbnail from first frame
       const generateThumbnail = async (videoUrl: string): Promise<Uint8Array> => {
@@ -139,10 +139,12 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
         });
       };
 
-      let thumbnail: Uint8Array | null = null;
+      let thumbnail: number[] | null = null;
       if (videoPreview) {
         try {
-          thumbnail = await generateThumbnail(videoPreview);
+          const thumbnailUint8 = await generateThumbnail(videoPreview);
+          // Convert Uint8Array to regular array for Candid compatibility
+          thumbnail = Array.from(thumbnailUint8);
         } catch (err) {
           console.warn('Thumbnail generation failed:', err);
           thumbnail = null;
@@ -197,22 +199,23 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
         result = await newAuthActor.uploadVideo(
           title,                    // title: Text
           description,             // description: Text
-          videoData,               // videoData: Blob
           thumbnail,               // thumbnail: ?Blob
+          videoData,               // videoData: Uint8Array (will be converted to storage ref)
           videoType,               // videoType: VideoType
           category,                // category: VideoCategory
           tags,                    // tags: [Text]
           hashtagsArr,             // hashtags: [Text]
-          {
-            ageRestricted: false,
-            allowComments: true,
-            allowDuets: false,
-            allowRemix: false,
-            isMonetized: false,
-            isPrivate: false,
-            isUnlisted: false,
-            scheduledAt: null
-          }
+          "en",                    // language: Text
+          false,                   // isMonetized: Bool
+          false,                   // ageRestricted: Bool
+          false,                   // isPrivate: Bool
+          false,                   // isUnlisted: Bool
+          true,                    // allowComments: Bool
+          false,                   // allowDuets: Bool
+          false,                   // allowRemix: Bool
+          videoMetadata,           // metadata: VideoMetadata
+          analytics,               // analytics: VideoAnalytics
+          null                     // scheduledAt: ?Int
         );
       } catch (err) {
         console.error('Upload call error:', err);

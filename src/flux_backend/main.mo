@@ -973,11 +973,11 @@ actor UserManager {
         )
     };
 
-    public shared(msg) func getUploadProgress(videoId: Text) : async Result.Result<Nat, Text> {
+    public shared(_) func getUploadProgress(videoId: Text) : async Result.Result<Nat, Text> {
         videoManager.getUploadProgress(videoId)
     };
 
-    public shared(msg) func updateProcessingProgress(
+    public shared(_) func updateProcessingProgress(
         videoId: Text,
         progress: Nat,
         status: Text

@@ -4,19 +4,18 @@ import { Upload, Play, Pause, Volume2, VolumeX, X, Hash, Settings } from 'lucide
 import { Button } from '../ui/Button';
 import { useAppStore } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
+import { VideoService } from '../../lib/videoService';
 import { 
-  fileToUint8Array, 
   validateVideoFile, 
   extractVideoMetadata, 
-  generateThumbnail,
   formatFileSize,
   formatDuration,
   getVideoType,
-  mapCategoryToBackend,
-  VideoUploadData 
+  fileToUint8Array,
+  generateThumbnail,
+  mapCategoryToBackend
 } from '../../lib/videoUtils';
 import toast from 'react-hot-toast';
-import { useWallet } from '../../hooks/useWallet';
 
 interface VideoUploadProps {
   onClose: () => void;
@@ -44,9 +43,6 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { currentUser, videoFeed, setVideoFeed } = useAppStore();
-
-  const { newAuthActor } = useWallet();
-
   const { newAuthActor, principal } = useWallet();
 
 
@@ -103,8 +99,8 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
     }
   };
 
-  const uploadToBackend = async () => {
-    if (!selectedFile || !newAuthActor || !currentUser) {
+  const uploadVideo = async () => {
+    if (!selectedFile || !newAuthActor || !principal) {
       toast.error('Missing required data for upload');
       return;
     }
@@ -118,14 +114,14 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
       toast.loading('Converting video file...');
       const videoData = await fileToUint8Array(selectedFile);
       
-      setUploadProgress(10);
+      setUploadProgress(20);
       
       // Generate thumbnail
       toast.loading('Generating thumbnail...');
       const thumbnailBlob = await generateThumbnail(selectedFile);
       const thumbnailData = await fileToUint8Array(new File([thumbnailBlob], 'thumbnail.jpg'));
       
-      setUploadProgress(20);
+      setUploadProgress(40);
       
       // Prepare upload data
       const videoType = videoMetadata ? getVideoType(videoMetadata.duration) : 'Short';
@@ -139,7 +135,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
         description: description.trim(),
         videoType: { [videoType]: null },
         category: { [mapCategoryToBackend(category)]: null },
-        tags: [], // Could be extracted from description or added separately
+        tags: [],
         hashtags: processedHashtags,
         settings: {
           isPrivate,
@@ -147,359 +143,57 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
           allowComments,
           allowDuets,
           allowRemix,
-          isMonetized: false, // Default for now
-          ageRestricted: false, // Default for now
-          scheduledAt: [], // No scheduling for now
+          isMonetized: false,
+          ageRestricted: false,
+          scheduledAt: [],
         }
       };
       
-      setUploadProgress(30);
+      setUploadProgress(60);
+      setUploadStatus('processing');
+      toast.loading('Uploading to backend...');
       
-      // Check if file is too large for single upload (1.5MB limit for safety)
-      const maxChunkSize = 1.5 * 1024 * 1024; // 1.5MB chunks
+      // Call backend upload function
+      const result = await newAuthActor.uploadVideo(
+        uploadData.title,
+        uploadData.description,
+        videoData,
+        [thumbnailData],
+        uploadData.videoType,
+        uploadData.category,
+        uploadData.tags,
+        uploadData.hashtags,
+        uploadData.settings
+      );
       
-      if (videoData.length > maxChunkSize) {
-        // Chunked upload for larger files
-        toast.loading('Uploading large video in chunks...');
-        
-        try {
-          // First, create the video record without video data
-          const videoRecord = await newAuthActor.createVideoRecord(
-            uploadData.title,
-            uploadData.description,
-            [thumbnailData], // Thumbnail
-            uploadData.videoType,
-            uploadData.category,
-            uploadData.tags,
-            uploadData.hashtags,
-            uploadData.settings
-          );
-          
-          if (!('ok' in videoRecord)) {
-            throw new Error(videoRecord.err || 'Failed to create video record');
-          }
-          
-          const videoId = videoRecord.ok;
-          setUploadProgress(40);
-          
-          // Split video data into chunks
-          const chunks = [];
-          for (let i = 0; i < videoData.length; i += maxChunkSize) {
-            const chunk = videoData.slice(i, i + maxChunkSize);
-            chunks.push(chunk);
-          }
-          
-          // Upload chunks
-          for (let i = 0; i < chunks.length; i++) {
-            toast.loading(`Uploading chunk ${i + 1}/${chunks.length}...`);
-            
-            try {
-              const chunkResult = await newAuthActor.uploadVideoChunk(
-                videoId,
-                chunks[i],
-                i,
-                chunks.length
-              );
-              
-              if (!('ok' in chunkResult)) {
-                throw new Error(`Chunk upload failed: ${chunkResult.err}`);
-              }
-              
-              // Update progress based on chunks uploaded
-              const chunkProgress = 40 + ((i + 1) / chunks.length) * 50; // 40-90%
-              setUploadProgress(Math.floor(chunkProgress));
-              
-            } catch (chunkError) {
-              console.error(`Failed to upload chunk ${i}:`, chunkError);
-              const errorMessage = chunkError instanceof Error ? chunkError.message : 'Unknown error';
-              throw new Error(`Failed to upload chunk ${i + 1}/${chunks.length}: ${errorMessage}`);
-            }
-          }
-          
-          setUploadProgress(100);
-          setUploadStatus('complete');
-          
-        } catch (chunkedError) {
-          console.warn('Chunked upload failed, falling back to single upload:', chunkedError);
-          toast.loading('Chunked upload failed, trying single upload...');
-          
-          // Fallback to single upload with smaller file
-          // Compress the video data if possible, or reject if too large
-          if (videoData.length > 2 * 1024 * 1024) { // 2MB limit for single upload
-            throw new Error('File too large for upload. Please use a video under 2MB or try compressing it.');
-          }
-          
-          // Try single upload as fallback
-          setUploadProgress(50);
-          setUploadStatus('processing');
-          toast.loading('Uploading to backend (fallback)...');
-          
-          const result = await newAuthActor.uploadVideo(
-            uploadData.title,
-            uploadData.description,
-            videoData,
-            [thumbnailData],
-            uploadData.videoType,
-            uploadData.category,
-            uploadData.tags,
-            uploadData.hashtags,
-            uploadData.settings
-          );
-          
-          if (!('ok' in result)) {
-            throw new Error(result.err || 'Upload failed');
-          }
-          
-          setUploadProgress(100);
-          setUploadStatus('complete');
-        }
-        
-      } else {
-        // Single upload for smaller files
-        setUploadProgress(50);
-        setUploadStatus('processing');
-        toast.loading('Uploading to backend...');
-        
-        // Call backend upload function
-        const result = await newAuthActor.uploadVideo(
-          uploadData.title,
-          uploadData.description,
-          videoData,
-          [thumbnailData], // Optional thumbnail
-          uploadData.videoType,
-          uploadData.category,
-          uploadData.tags,
-          uploadData.hashtags,
-          uploadData.settings
-        );
-        
-        if (!('ok' in result)) {
-          throw new Error(result.err || 'Upload failed');
-        }
-        
-        setUploadProgress(100);
-        setUploadStatus('complete');
+      if (!('ok' in result)) {
+        throw new Error(result.err || 'Upload failed');
       }
       
-      // Create frontend video object for immediate display
-      const newVideo = {
-        id: Date.now().toString(), // Use timestamp for now since we might not have the backend ID
-        title: uploadData.title,
-        thumbnail: videoPreview || '',
-        videoUrl: videoPreview || '',
-        creator: currentUser,
-        views: 0,
-        likes: 0,
-        duration: videoMetadata?.duration || 0,
-        isLiked: false,
-        description: uploadData.description,
-        hashtags: processedHashtags,
-      };
+      setUploadProgress(100);
+      setUploadStatus('complete');
       
-      // Add to feed
-      setVideoFeed([newVideo, ...videoFeed]);
-      
+      console.log('Video uploaded successfully with ID:', result.ok);
       toast.success('Video uploaded successfully!');
+      
+      // Trigger immediate refresh of video feed to show the new video
+      // This will help other users see the video faster
+      try {
+        const videoService = new VideoService(newAuthActor);
+        const updatedVideos = await videoService.getAllVideos();
+        setVideoFeed(updatedVideos);
+        console.log('Video feed refreshed after upload');
+      } catch (error) {
+        console.error('Failed to refresh video feed after upload:', error);
+      }
+      
       setTimeout(() => onClose(), 1000);
       
     } catch (error) {
       setUploadStatus('error');
-      let errorMessage = 'Upload failed';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('too large')) {
-          errorMessage = 'File too large. Please use a video under 2MB or compress your video.';
-        } else if (error.message.includes('Payload Too Large')) {
-          errorMessage = 'File too large for network. Please use a smaller video file.';
-        } else if (error.message.includes('chunk')) {
-          errorMessage = 'Chunked upload failed. Try with a smaller video file.';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       toast.error(errorMessage);
       console.error('Upload error:', error);
-
-  const uploadVideo = async () => {
-    if (!selectedFile) {
-      toast.error('No video file selected');
-      return;
-    }
-    if (!newAuthActor) {
-      toast.error('Not connected to backend. Please connect your wallet.');
-      return;
-    }
-    if (!principal) {
-      toast.error('No principal found. Please connect your wallet.');
-      return;
-    }
-    
-    setIsUploading(true);
-    setUploadProgress(0);
-    
-    try {
-      // Read file as ArrayBuffer
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      // Convert to Uint8Array for candid blob - this becomes videoData
-      const videoData = new Uint8Array(arrayBuffer);
-
-      // Generate thumbnail from first frame
-      const generateThumbnail = async (videoUrl: string): Promise<Uint8Array> => {
-        return new Promise((resolve, reject) => {
-          const video = document.createElement('video');
-          video.src = videoUrl;
-          video.crossOrigin = 'anonymous';
-          video.muted = true;
-          video.playsInline = true;
-          video.currentTime = 0.5; // Seek to 0.5 seconds for better frame
-          
-          video.addEventListener('loadeddata', () => {
-            // Set canvas size to video size (or limit max size for performance)
-            const canvas = document.createElement('canvas');
-            const maxSize = 400; // Smaller thumbnail for better performance
-            const aspectRatio = video.videoWidth / video.videoHeight;
-            
-            if (video.videoWidth > video.videoHeight) {
-              canvas.width = Math.min(maxSize, video.videoWidth);
-              canvas.height = canvas.width / aspectRatio;
-            } else {
-              canvas.height = Math.min(maxSize, video.videoHeight);
-              canvas.width = canvas.height * aspectRatio;
-            }
-            
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return reject('Canvas context error');
-            
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            canvas.toBlob((blob) => {
-              if (!blob) return reject('Thumbnail blob error');
-              
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                // Convert to Uint8Array for Motoko Blob
-                const arrayBuffer = reader.result as ArrayBuffer;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                resolve(uint8Array);
-              };
-              reader.onerror = () => reject('Thumbnail read error');
-              reader.readAsArrayBuffer(blob);
-            }, 'image/jpeg', 0.8);
-          });
-          
-          video.onerror = () => reject('Video load error');
-          
-          // Set a timeout in case video doesn't load
-          setTimeout(() => reject('Video load timeout'), 10000);
-        });
-      };
-
-      let thumbnail: Uint8Array | null = null;
-      if (videoPreview) {
-        try {
-          thumbnail = await generateThumbnail(videoPreview);
-        } catch (err) {
-          console.warn('Thumbnail generation failed:', err);
-          thumbnail = null;
-        }
-      }
-
-      setUploadProgress(30);
-
-      // Prepare video metadata according to your Motoko type
-      const videoMetadata = {
-        duration: 0, // You might want to get actual video duration
-        resolution: "720p", // Default or detect from video
-        format: selectedFile.type,
-        fileSize: selectedFile.size,
-        fps: 30, // Default or detect
-        bitrate: 0, // Default or calculate
-        aspectRatio: "16:9", // Default or detect
-        codec: "h264" // Default
-      };
-
-      const analytics = {
-        views: 0,
-        likes: 0,
-        dislikes: 0,
-        shares: 0,
-        comments: 0,
-        watchTime: 0,
-        engagement: 0.0,
-        impressions: 0,
-        clickThroughRate: 0.0,
-        demographics: [],
-        trafficSources: [],
-        retentionGraph: []
-      };
-
-      // Parse hashtags properly
-      const hashtagsArr = hashtags
-        .split(/\s+/)
-        .filter(tag => tag.startsWith('#') && tag.length > 1)
-        .map(tag => tag.substring(1)); // Remove # symbol
-
-      const videoType = { Short: null }; // Or whatever your VideoType variants are
-      const category = { Entertainment: null }; // Adjust based on your VideoCategory variants
-      const tags: string[] = []; // You might want to add a tags input field
-
-      setUploadProgress(50);
-      
-      // Call backend with individual parameters matching the Video type structure
-      // Instead of passing an object, pass each parameter separately
-      let result;
-      try {
-        result = await newAuthActor.uploadVideo(
-          title,                    // title: Text
-          description,             // description: Text
-          videoData,               // videoData: Blob
-          thumbnail,               // thumbnail: ?Blob
-          videoType,               // videoType: VideoType
-          category,                // category: VideoCategory
-          tags,                    // tags: [Text]
-          hashtagsArr,             // hashtags: [Text]
-          {
-            ageRestricted: false,
-            allowComments: true,
-            allowDuets: false,
-            allowRemix: false,
-            isMonetized: false,
-            isPrivate: false,
-            isUnlisted: false,
-            scheduledAt: null
-          }
-        );
-      } catch (err) {
-        console.error('Upload call error:', err);
-        if (err instanceof TypeError && err.message.includes('NetworkError')) {
-          toast.error('Network error: Check backend CORS settings.');
-        } else if (err && typeof err === 'object' && 'message' in err) {
-          toast.error('Upload failed: ' + err.message);
-        } else {
-          toast.error('Upload failed: Unknown error');
-        }
-        throw err;
-      }
-      
-      setUploadProgress(100);
-      
-      if (result && ('ok' in result || 'Ok' in result)) {
-        toast.success('Video uploaded successfully!');
-        // Clean up preview URL
-        if (videoPreview) {
-          URL.revokeObjectURL(videoPreview);
-        }
-        setSelectedFile(null);
-        setVideoPreview(null);
-        onClose();
-      } else {
-        const errorMsg = result?.err || result?.Err || 'Unknown error';
-        toast.error('Upload failed: ' + errorMsg);
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      // Error already handled in the try block
     } finally {
       setIsUploading(false);
     }
@@ -695,7 +389,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
                 <Button
                   onClick={onClose}
                   className="px-8"
-                  variant={uploadStatus === 'error' ? 'secondary' : 'default'}
+                  variant={uploadStatus === 'error' ? 'secondary' : 'primary'}
                 >
                   {uploadStatus === 'complete' ? 'Done' : 'Close'}
                 </Button>
@@ -920,7 +614,6 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
               Cancel
             </Button>
             <Button
-              onClick={uploadToBackend}
               onClick={uploadVideo}
               disabled={isUploading || !title.trim()}
               isLoading={isUploading}

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Play, Pause, Volume2, VolumeX, X, Hash, Settings } from 'lucide-react';
+import { Upload, Play, Pause, Volume2, VolumeX, X, Hash, AtSign } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAppStore } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
@@ -15,6 +15,7 @@ import {
   generateThumbnail,
   mapCategoryToBackend
 } from '../../lib/videoUtils';
+
 import toast from 'react-hot-toast';
 
 interface VideoUploadProps {
@@ -29,44 +30,21 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [hashtags, setHashtags] = useState('');
-  const [category, setCategory] = useState('gaming');
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [isUnlisted, setIsUnlisted] = useState(false);
-  const [allowComments, setAllowComments] = useState(true);
-  const [allowDuets, setAllowDuets] = useState(true);
-  const [allowRemix, setAllowRemix] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState<'uploading' | 'processing' | 'complete' | 'error'>('uploading');
-  const [videoMetadata, setVideoMetadata] = useState<{ duration: number; width: number; height: number } | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { currentUser, videoFeed, setVideoFeed } = useAppStore();
   const { newAuthActor, principal } = useWallet();
 
-
-  const handleFileSelect = useCallback(async (file: File) => {
-    // Validate file first
-    const validation = validateVideoFile(file);
-    if (!validation.isValid) {
-      toast.error(validation.error || 'Invalid video file');
-      return;
-    }
-
-    try {
+  const handleFileSelect = useCallback((file: File) => {
+    if (file && file.type.startsWith('video/')) {
       setSelectedFile(file);
       const url = URL.createObjectURL(file);
       setVideoPreview(url);
-      
-      // Extract video metadata
-      const metadata = await extractVideoMetadata(file);
-      setVideoMetadata(metadata);
-      
-      toast.success(`Video loaded - ${formatDuration(metadata.duration)} • ${metadata.width}x${metadata.height}`);
-    } catch (error) {
-      toast.error('Failed to load video metadata');
-      console.error('Video metadata extraction failed:', error);
+    } else {
+      toast.error('Please select a valid video file');
     }
   }, []);
 
@@ -193,7 +171,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
       setUploadStatus('error');
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       toast.error(errorMessage);
-      console.error('Upload error:', error);
+      consol
     } finally {
       setIsUploading(false);
     }
@@ -224,7 +202,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             Drag and drop your video here, or click to browse
           </p>
           <p className="text-sm text-flux-text-secondary">
-            Supports MP4, MOV, AVI up to 10MB
+            Supports MP4, MOV, AVI up to 100MB
           </p>
           <input
             ref={fileInputRef}
@@ -397,8 +375,8 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             )}
           </div>
         </div>
+
       ) : (
-        /* Video Details Form - Only show when not uploading */
         <div className="space-y-6">
           {/* Video Preview */}
           <div className="relative aspect-[9/16] max-w-xs mx-auto bg-black rounded-xl overflow-hidden">
@@ -490,118 +468,25 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
                 Separate hashtags with spaces
               </p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-flux-text-primary mb-2">
-                Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-4 py-3 bg-flux-bg-tertiary text-flux-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-flux-primary"
-              >
-                <option value="gaming">Gaming</option>
-                <option value="entertainment">Entertainment</option>
-                <option value="music">Music</option>
-                <option value="education">Education</option>
-                <option value="sports">Sports</option>
-                <option value="comedy">Comedy</option>
-                <option value="dance">Dance</option>
-                <option value="food">Food</option>
-                <option value="travel">Travel</option>
-                <option value="art">Art</option>
-                <option value="technology">Technology</option>
-                <option value="lifestyle">Lifestyle</option>
-                <option value="news">News</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            {/* Privacy Settings */}
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-flux-text-primary">
-                <Settings className="w-4 h-4 inline mr-1" />
-                Privacy & Settings
-              </label>
-              
-              <div className="space-y-2">
-                <label className="flex items-center justify-between">
-                  <span className="text-sm text-flux-text-primary">Private video</span>
-                  <input
-                    type="checkbox"
-                    checked={isPrivate}
-                    onChange={(e) => setIsPrivate(e.target.checked)}
-                    className="w-4 h-4 text-flux-primary rounded focus:ring-flux-primary"
-                  />
-                </label>
-                
-                <label className="flex items-center justify-between">
-                  <span className="text-sm text-flux-text-primary">Unlisted (not in search)</span>
-                  <input
-                    type="checkbox"
-                    checked={isUnlisted}
-                    onChange={(e) => setIsUnlisted(e.target.checked)}
-                    className="w-4 h-4 text-flux-primary rounded focus:ring-flux-primary"
-                  />
-                </label>
-                
-                <label className="flex items-center justify-between">
-                  <span className="text-sm text-flux-text-primary">Allow comments</span>
-                  <input
-                    type="checkbox"
-                    checked={allowComments}
-                    onChange={(e) => setAllowComments(e.target.checked)}
-                    className="w-4 h-4 text-flux-primary rounded focus:ring-flux-primary"
-                  />
-                </label>
-                
-                <label className="flex items-center justify-between">
-                  <span className="text-sm text-flux-text-primary">Allow duets</span>
-                  <input
-                    type="checkbox"
-                    checked={allowDuets}
-                    onChange={(e) => setAllowDuets(e.target.checked)}
-                    className="w-4 h-4 text-flux-primary rounded focus:ring-flux-primary"
-                  />
-                </label>
-                
-                <label className="flex items-center justify-between">
-                  <span className="text-sm text-flux-text-primary">Allow remixes</span>
-                  <input
-                    type="checkbox"
-                    checked={allowRemix}
-                    onChange={(e) => setAllowRemix(e.target.checked)}
-                    className="w-4 h-4 text-flux-primary rounded focus:ring-flux-primary"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* Video Info */}
-            {selectedFile && videoMetadata && (
-              <div className="bg-flux-bg-tertiary rounded-lg p-4 space-y-2">
-                <h4 className="text-sm font-medium text-flux-text-primary">Video Information</h4>
-                <div className="grid grid-cols-2 gap-4 text-xs text-flux-text-secondary">
-                  <div>
-                    <span className="block">Duration</span>
-                    <span className="text-flux-text-primary">{formatDuration(videoMetadata.duration)}</span>
-                  </div>
-                  <div>
-                    <span className="block">Resolution</span>
-                    <span className="text-flux-text-primary">{videoMetadata.width}x{videoMetadata.height}</span>
-                  </div>
-                  <div>
-                    <span className="block">File Size</span>
-                    <span className="text-flux-text-primary">{formatFileSize(selectedFile.size)}</span>
-                  </div>
-                  <div>
-                    <span className="block">Type</span>
-                    <span className="text-flux-text-primary">{getVideoType(videoMetadata.duration)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
+
+          {/* Upload Progress */}
+          {isUploading && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-flux-text-primary">Uploading...</span>
+                <span className="text-flux-text-secondary">{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-flux-bg-tertiary rounded-full h-2">
+                <motion.div
+                  className="bg-flux-gradient h-2 rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${uploadProgress}%` }}
+                  transition={{ duration: 0.2 }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex space-x-3">
@@ -619,7 +504,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
               isLoading={isUploading}
               className="flex-1"
             >
-              Publish Video
+              {isUploading ? 'Uploading...' : 'Publish Video'}
             </Button>
           </div>
         </div>

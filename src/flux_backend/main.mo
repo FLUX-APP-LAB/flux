@@ -1003,13 +1003,13 @@ actor UserManager {
             chunkIndex,
             totalChunks
         )
-    };
-
+    }
     public shared(_msg) func getUploadProgress(videoId: Text) : async Result.Result<Nat, Text> {
         videoManager.getUploadProgress(videoId)
     };
 
     public shared(_msg) func updateProcessingProgress(
+
         videoId: Text,
         progress: Nat,
         status: Text

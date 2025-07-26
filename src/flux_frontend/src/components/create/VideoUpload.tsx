@@ -3,8 +3,20 @@ import { motion } from 'framer-motion';
 import { Upload, Play, Pause, Volume2, VolumeX, X, Hash, AtSign } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAppStore } from '../../store/appStore';
-import toast from 'react-hot-toast';
 import { useWallet } from '../../hooks/useWallet';
+import { VideoService } from '../../lib/videoService';
+import { 
+  validateVideoFile, 
+  extractVideoMetadata, 
+  formatFileSize,
+  formatDuration,
+  getVideoType,
+  fileToUint8Array,
+  generateThumbnail,
+  mapCategoryToBackend
+} from '../../lib/videoUtils';
+
+import toast from 'react-hot-toast';
 
 interface VideoUploadProps {
   onClose: () => void;
@@ -66,126 +78,100 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   };
 
   const uploadVideo = async () => {
-    if (!selectedFile) {
-      toast.error('No video file selected');
+    if (!selectedFile || !newAuthActor || !principal) {
+      toast.error('Missing required data for upload');
       return;
     }
-    if (!newAuthActor) {
-      toast.error('Not connected to backend. Please connect your wallet.');
-      return;
-    }
-    if (!principal) {
-      toast.error('No principal found. Please connect your wallet.');
-      return;
-    }
+
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStatus('uploading');
+
     try {
-      // Read file as ArrayBuffer
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      // Convert to Uint8Array for candid blob
-      const videoData = Array.from(new Uint8Array(arrayBuffer));
-
-      // Generate thumbnail from first frame
-      const generateThumbnail = async (videoUrl: string): Promise<number[]> => {
-        return new Promise((resolve, reject) => {
-          const video = document.createElement('video');
-          video.src = videoUrl;
-          video.crossOrigin = 'anonymous';
-          video.muted = true;
-          video.playsInline = true;
-          video.currentTime = 0;
-          video.addEventListener('loadeddata', () => {
-            // Set canvas size to video size
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return reject('Canvas context error');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob((blob) => {
-              if (!blob) return reject('Thumbnail blob error');
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const arr = new Uint8Array(reader.result as ArrayBuffer);
-                resolve(Array.from(arr));
-              };
-              reader.onerror = () => reject('Thumbnail read error');
-              reader.readAsArrayBuffer(blob);
-            }, 'image/jpeg', 0.8);
-          });
-          video.onerror = () => reject('Video load error');
-        });
-      };
-
-      let thumbnail: number[] = [];
-      if (videoPreview) {
-        try {
-          thumbnail = await generateThumbnail(videoPreview);
-        } catch (err) {
-          console.warn('Thumbnail generation failed:', err);
-          thumbnail = [];
+      // Convert file to Uint8Array for Motoko backend
+      toast.loading('Converting video file...');
+      const videoData = await fileToUint8Array(selectedFile);
+      
+      setUploadProgress(20);
+      
+      // Generate thumbnail
+      toast.loading('Generating thumbnail...');
+      const thumbnailBlob = await generateThumbnail(selectedFile);
+      const thumbnailData = await fileToUint8Array(new File([thumbnailBlob], 'thumbnail.jpg'));
+      
+      setUploadProgress(40);
+      
+      // Prepare upload data
+      const videoType = videoMetadata ? getVideoType(videoMetadata.duration) : 'Short';
+      const processedHashtags = hashtags
+        .split(' ')
+        .filter(tag => tag.startsWith('#') && tag.length > 1)
+        .map(tag => tag.slice(1)); // Remove # symbol
+      
+      const uploadData = {
+        title: title.trim() || 'Untitled Video',
+        description: description.trim(),
+        videoType: { [videoType]: null },
+        category: { [mapCategoryToBackend(category)]: null },
+        tags: [],
+        hashtags: processedHashtags,
+        settings: {
+          isPrivate,
+          isUnlisted,
+          allowComments,
+          allowDuets,
+          allowRemix,
+          isMonetized: false,
+          ageRestricted: false,
+          scheduledAt: [],
         }
-      }
-
-      // Default values for demo; you may want to add UI for these
-      const videoType = { Short: null };
-      const category = { Entertainment: null };
-      const tags: string[] = [];
-      const hashtagsArr = hashtags.split(' ').filter(tag => tag.startsWith('#'));
-      const settings = {
-        ageRestricted: false,
-        allowComments: true,
-        allowDuets: false,
-        allowRemix: false,
-        isMonetized: false,
-        isPrivate: false,
-        isUnlisted: false,
-        scheduledAt: [],
       };
-      setUploadProgress(10);
-      // Call backend
-      let result;
-      try {
-        result = await newAuthActor.uploadVideo(
-          title,
-          description,
-          videoData,
-          thumbnail,
-          videoType,
-          category,
-          tags,
-          hashtagsArr,
-          settings
-        );
-      } catch (err) {
-        // Network/CORS error handling
-        if (err instanceof TypeError && err.message.includes('NetworkError')) {
-          toast.error('Network error: Check backend CORS settings.');
-        } else {
-          const errorMessage = typeof err === 'object' && err !== null && 'message' in err
-            ? (err as { message?: string }).message
-            : undefined;
-          toast.error('Upload failed: ' + (errorMessage || 'Unknown error'));
-        }
-        throw err;
+      
+      setUploadProgress(60);
+      setUploadStatus('processing');
+      toast.loading('Uploading to backend...');
+      
+      // Call backend upload function
+      const result = await newAuthActor.uploadVideo(
+        uploadData.title,
+        uploadData.description,
+        videoData,
+        [thumbnailData],
+        uploadData.videoType,
+        uploadData.category,
+        uploadData.tags,
+        uploadData.hashtags,
+        uploadData.settings
+      );
+      
+      if (!('ok' in result)) {
+        throw new Error(result.err || 'Upload failed');
       }
+      
       setUploadProgress(100);
-      if (result && 'ok' in result) {
-        toast.success('Video uploaded successfully!');
-        // Clean up preview URL
-        if (videoPreview) {
-          URL.revokeObjectURL(videoPreview);
-        }
-        setSelectedFile(null);
-        setVideoPreview(null);
-        onClose();
-      } else {
-        toast.error('Upload failed: ' + (result?.err || 'Unknown error'));
+      setUploadStatus('complete');
+      
+      console.log('Video uploaded successfully with ID:', result.ok);
+      toast.success('Video uploaded successfully!');
+      
+      // Trigger immediate refresh of video feed to show the new video
+      // This will help other users see the video faster
+      try {
+        const videoService = new VideoService(newAuthActor);
+        const updatedVideos = await videoService.getAllVideos();
+        setVideoFeed(updatedVideos);
+        console.log('Video feed refreshed after upload');
+      } catch (error) {
+        console.error('Failed to refresh video feed after upload:', error);
       }
-    } catch (err) {
-      console.error('Upload error:', err);
-      // Error already handled above
+      
+      setTimeout(() => onClose(), 1000);
+      
+    } catch (error) {
+      setUploadStatus('error');
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      toast.error(errorMessage);
+      consol
     } finally {
       setIsUploading(false);
     }
@@ -226,6 +212,170 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             className="hidden"
           />
         </div>
+      ) : isUploading ? (
+        /* Upload Progress Screen */
+        <div className="space-y-6">
+          {/* Video Preview - Smaller during upload */}
+          <div className="relative aspect-[9/16] max-w-xs mx-auto bg-black rounded-xl overflow-hidden">
+            <video
+              ref={videoRef}
+              src={videoPreview!}
+              className="w-full h-full object-cover"
+              muted
+              loop
+              autoPlay
+            />
+            
+            {/* Upload Overlay */}
+            <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+              <div className="text-center text-white p-6">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                <h3 className="text-lg font-semibold mb-2">
+                  {uploadStatus === 'uploading' && 'Uploading Video...'}
+                  {uploadStatus === 'processing' && 'Processing Video...'}
+                  {uploadStatus === 'complete' && 'Upload Complete!'}
+                  {uploadStatus === 'error' && 'Upload Failed'}
+                </h3>
+                <p className="text-sm opacity-90 mb-4">
+                  {uploadStatus === 'uploading' && 'Converting and uploading your video to the blockchain'}
+                  {uploadStatus === 'processing' && 'Your video is being processed and will be available soon'}
+                  {uploadStatus === 'complete' && 'Your video has been successfully published'}
+                  {uploadStatus === 'error' && 'Something went wrong during the upload'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload Progress Details */}
+          <div className="bg-flux-bg-tertiary rounded-xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-semibold text-flux-text-primary">
+                {title || 'Untitled Video'}
+              </h4>
+              <span className="text-2xl font-bold text-flux-primary">
+                {uploadProgress}%
+              </span>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-flux-bg-primary rounded-full h-3">
+              <motion.div
+                className={`h-3 rounded-full ${
+                  uploadStatus === 'error' ? 'bg-red-500' : 
+                  uploadStatus === 'complete' ? 'bg-green-500' : 
+                  'bg-flux-gradient'
+                }`}
+                initial={{ width: 0 }}
+                animate={{ width: `${uploadProgress}%` }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              />
+            </div>
+
+            {/* Status Steps */}
+            <div className="flex items-center justify-between text-sm">
+              <div className={`flex items-center space-x-2 ${
+                uploadProgress >= 20 ? 'text-flux-primary' : 'text-flux-text-secondary'
+              }`}>
+                <div className={`w-3 h-3 rounded-full ${
+                  uploadProgress >= 20 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
+                }`}></div>
+                <span>Converting</span>
+              </div>
+              
+              <div className={`flex items-center space-x-2 ${
+                uploadProgress >= 40 ? 'text-flux-primary' : 'text-flux-text-secondary'
+              }`}>
+                <div className={`w-3 h-3 rounded-full ${
+                  uploadProgress >= 40 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
+                }`}></div>
+                <span>Thumbnail</span>
+              </div>
+              
+              <div className={`flex items-center space-x-2 ${
+                uploadProgress >= 60 ? 'text-flux-primary' : 'text-flux-text-secondary'
+              }`}>
+                <div className={`w-3 h-3 rounded-full ${
+                  uploadProgress >= 60 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
+                }`}></div>
+                <span>Uploading</span>
+              </div>
+              
+              <div className={`flex items-center space-x-2 ${
+                uploadProgress >= 100 ? 'text-flux-primary' : 'text-flux-text-secondary'
+              }`}>
+                <div className={`w-3 h-3 rounded-full ${
+                  uploadProgress >= 100 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
+                }`}></div>
+                <span>Complete</span>
+              </div>
+            </div>
+
+            {/* Video Info During Upload */}
+            {videoMetadata && (
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-flux-bg-primary">
+                <div className="text-center">
+                  <span className="block text-xs text-flux-text-secondary">Duration</span>
+                  <span className="text-sm font-medium text-flux-text-primary">
+                    {formatDuration(videoMetadata.duration)}
+                  </span>
+                </div>
+                <div className="text-center">
+                  <span className="block text-xs text-flux-text-secondary">Size</span>
+                  <span className="text-sm font-medium text-flux-text-primary">
+                    {formatFileSize(selectedFile.size)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Current Action */}
+            <div className="text-center pt-2">
+              <p className="text-sm text-flux-text-secondary">
+                {uploadProgress < 10 && "Converting video file..."}
+                {uploadProgress >= 10 && uploadProgress < 20 && "Generating thumbnail..."}
+                {uploadProgress >= 20 && uploadProgress < 30 && "Preparing upload..."}
+                {uploadProgress >= 30 && uploadProgress < 40 && "Checking file size..."}
+                {uploadProgress >= 40 && uploadProgress < 90 && "Uploading video chunks..."}
+                {uploadProgress >= 90 && uploadProgress < 100 && "Finalizing upload..."}
+                {uploadProgress >= 100 && uploadStatus === 'processing' && "Processing video..."}
+                {uploadStatus === 'complete' && "Video successfully published!"}
+                {uploadStatus === 'error' && "Upload failed. Please try again."}
+              </p>
+            </div>
+
+            {/* Cancel Button - Only show during early stages */}
+            {uploadProgress < 60 && uploadStatus !== 'complete' && uploadStatus !== 'error' && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setIsUploading(false);
+                    setUploadProgress(0);
+                    setUploadStatus('uploading');
+                    toast.error('Upload cancelled');
+                  }}
+                  className="px-8"
+                >
+                  Cancel Upload
+                </Button>
+              </div>
+            )}
+
+            {/* Close Button - Show when complete or error */}
+            {(uploadStatus === 'complete' || uploadStatus === 'error') && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  onClick={onClose}
+                  className="px-8"
+                  variant={uploadStatus === 'error' ? 'secondary' : 'primary'}
+                >
+                  {uploadStatus === 'complete' ? 'Done' : 'Close'}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
       ) : (
         <div className="space-y-6">
           {/* Video Preview */}

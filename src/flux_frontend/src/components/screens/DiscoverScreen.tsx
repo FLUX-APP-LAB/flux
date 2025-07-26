@@ -1,32 +1,193 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, TrendingUp, Hash, Users, Play } from 'lucide-react';
+import { Search, TrendingUp, Hash, Users, Play, RefreshCw } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
+import { UserCard } from '../ui/UserCard';
+import { VideoCard } from '../ui/VideoCard';
+import { HashtagCard } from '../ui/HashtagCard';
 import { useAppStore } from '../../store/appStore';
-import { generateMockData, formatNumber } from '../../lib/utils';
+import { useWallet } from '../../hooks/useWallet';
+import { formatNumber } from '../../lib/utils';
+import { SearchService, FrontendUser } from '../../lib/searchService';
+import { VideoService } from '../../lib/videoService';
+import toast from 'react-hot-toast';
 
 export const DiscoverScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'trending' | 'hashtags' | 'creators'>('trending');
   const [trendingVideos, setTrendingVideos] = useState<any[]>([]);
   const [trendingHashtags, setTrendingHashtags] = useState<any[]>([]);
-  const [suggestedCreators, setSuggestedCreators] = useState<any[]>([]);
-  const { setActivePage } = useAppStore();
+  const [suggestedCreators, setSuggestedCreators] = useState<FrontendUser[]>([]);
+  const [searchResults, setSearchResults] = useState<{ videos: any[]; users: FrontendUser[]; hashtags: any[] }>({
+    videos: [],
+    users: [],
+    hashtags: []
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const { setActivePage, currentUser } = useAppStore();
+  const { newAuthActor, principal } = useWallet();
 
+  // Load initial data
   useEffect(() => {
-    const { mockVideos, mockUsers } = generateMockData();
-    setTrendingVideos(mockVideos.slice(0, 6));
-    setSuggestedCreators(mockUsers);
-    setTrendingHashtags([
-      { tag: '#viral', posts: 2400000, growth: '+12%' },
-      { tag: '#fyp', posts: 1800000, growth: '+8%' },
-      { tag: '#trending', posts: 1200000, growth: '+15%' },
-      { tag: '#comedy', posts: 980000, growth: '+5%' },
-      { tag: '#music', posts: 750000, growth: '+20%' },
-      { tag: '#dance', posts: 650000, growth: '+10%' },
-    ]);
-  }, []);
+    const loadInitialData = async () => {
+      if (!newAuthActor) return;
+      
+      setIsLoading(true);
+      try {
+        const searchService = new SearchService(newAuthActor, currentUser?.id);
+        const videoService = new VideoService(newAuthActor);
+        
+        // Load trending videos
+        const trending = await videoService.getTrendingVideos();
+        setTrendingVideos(trending.slice(0, 6));
+        
+        // Load suggested creators
+        const suggestedUsers = await searchService.getSuggestedUsers(10);
+        setSuggestedCreators(suggestedUsers);
+        
+        // Get hashtags from recent videos
+        const allVideos = await videoService.getAllVideos();
+        const hashtags = extractHashtagsFromVideos(allVideos);
+        setTrendingHashtags(hashtags);
+        
+      } catch (error) {
+        console.error('Error loading discover data:', error);
+        toast.error('Failed to load discover content');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, [newAuthActor, currentUser]);
+
+  // Search functionality
+  useEffect(() => {
+    const performSearch = async () => {
+      if (!newAuthActor) {
+        setSearchResults({ videos: [], users: [], hashtags: [] });
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const searchService = new SearchService(newAuthActor, currentUser?.id);
+        const results = await searchService.searchAll(searchQuery);
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Error performing search:', error);
+        toast.error('Search failed');
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(performSearch, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, newAuthActor, currentUser]);
+
+  const handleFollowUser = async (userId: string) => {
+    if (!newAuthActor) return;
+    
+    // Check if the user is already being followed
+    const userToFollow = suggestedCreators.find(user => user.id === userId) || 
+                        searchResults.users.find(user => user.id === userId);
+    
+    if (userToFollow?.isFollowing) {
+      toast.info('You are already following this user');
+      return;
+    }
+    
+    try {
+      const searchService = new SearchService(newAuthActor, currentUser?.id);
+      const success = await searchService.followUser(userId);
+      
+      if (success) {
+        // Update the user in the UI
+        setSuggestedCreators(prev => 
+          prev.map(user => 
+            user.id === userId 
+              ? { ...user, isFollowing: true, followersCount: user.followersCount + 1 }
+              : user
+          )
+        );
+        setSearchResults(prev => ({
+          ...prev,
+          users: prev.users.map(user => 
+            user.id === userId 
+              ? { ...user, isFollowing: true, followersCount: user.followersCount + 1 }
+              : user
+          )
+        }));
+        
+        // Also update the current user's following list
+        if (currentUser) {
+          useAppStore.setState(state => ({
+            ...state,
+            currentUser: {
+              ...state.currentUser!,
+              following: [...(state.currentUser!.following || []), userId]
+            }
+          }));
+        }
+        
+        toast.success('User followed successfully');
+      } else {
+        toast.error('Failed to follow user');
+      }
+    } catch (error) {
+      console.error('Error following user:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Failed to follow user';
+      
+      // Improved error message to catch "Already following" errors
+      if (errorMsg.includes('Already following')) {
+        toast.info('You are already following this user');
+        
+        // Update UI to show the user as followed
+        setSuggestedCreators(prev => 
+          prev.map(user => 
+            user.id === userId 
+              ? { ...user, isFollowing: true }
+              : user
+          )
+        );
+        setSearchResults(prev => ({
+          ...prev,
+          users: prev.users.map(user => 
+            user.id === userId 
+              ? { ...user, isFollowing: true }
+              : user
+          )
+        }));
+      } else {
+        toast.error('Failed to follow user');
+      }
+    }
+  };
+
+  const extractHashtagsFromVideos = (videos: any[]) => {
+    const hashtagCounts = new Map<string, number>();
+    
+    videos.forEach(video => {
+      if (video.hashtags && Array.isArray(video.hashtags)) {
+        video.hashtags.forEach((tag: string) => {
+          const count = hashtagCounts.get(tag) || 0;
+          hashtagCounts.set(tag, count + 1);
+        });
+      }
+    });
+
+    return Array.from(hashtagCounts.entries())
+      .map(([tag, count]) => ({
+        tag: `#${tag}`,
+        posts: count,
+        growth: `+${Math.floor(Math.random() * 20)}%`
+      }))
+      .sort((a, b) => b.posts - a.posts)
+      .slice(0, 6);
+  };
 
   const tabs = [
     { id: 'trending', label: 'Trending', icon: TrendingUp },
@@ -51,31 +212,106 @@ export const DiscoverScreen: React.FC = () => {
               placeholder="Search videos, creators, hashtags..."
               className="w-full pl-10 pr-4 py-3 bg-flux-bg-secondary text-flux-text-primary rounded-xl focus:outline-none focus:ring-2 focus:ring-flux-primary"
             />
+            {isSearching && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <RefreshCw className="w-5 h-5 text-flux-text-secondary animate-spin" />
+              </div>
+            )}
           </div>
 
-          {/* Tabs */}
-          <div className="flex space-x-1 bg-flux-bg-secondary rounded-lg p-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-md transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-flux-primary text-white'
-                    : 'text-flux-text-secondary hover:text-flux-text-primary'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                <span className="text-sm font-medium">{tab.label}</span>
-              </button>
-            ))}
-          </div>
+          {/* Tabs - only show when not searching */}
+          {!searchQuery.trim() && (
+            <div className="flex space-x-1 bg-flux-bg-secondary rounded-lg p-1">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-md transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-flux-primary text-white'
+                      : 'text-flux-text-secondary hover:text-flux-text-primary'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  <span className="text-sm font-medium">{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="p-4">
-        {activeTab === 'trending' && (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <RefreshCw className="w-8 h-8 text-flux-primary animate-spin" />
+          </div>
+        ) : searchQuery.trim() || searchResults.users.length > 0 ? (
+          /* Search Results */
+          <div className="space-y-6">
+            {/* Users Results */}
+            {searchResults.users.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
+                  {searchQuery.trim() ? `Users (${searchResults.users.length})` : 'All Users'}
+                </h2>
+                <div className="space-y-3">
+                  {searchResults.users.map((user, index) => (
+                    <UserCard 
+                      key={user.id} 
+                      user={user} 
+                      index={index} 
+                      onFollow={() => handleFollowUser(user.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Videos Results */}
+            {searchResults.videos.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
+                  Videos ({searchResults.videos.length})
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {searchResults.videos.slice(0, 6).map((video, index) => (
+                    <VideoCard 
+                      key={video.id} 
+                      video={video} 
+                      index={index} 
+                      onClick={() => setActivePage('home')}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Hashtags Results */}
+            {searchResults.hashtags.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
+                  Hashtags ({searchResults.hashtags.length})
+                </h2>
+                <div className="space-y-3">
+                  {searchResults.hashtags.map((hashtag, index) => (
+                    <HashtagCard key={hashtag.tag} hashtag={hashtag} index={index} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No Results */}
+            {searchQuery.trim() && searchResults.users.length === 0 && searchResults.videos.length === 0 && searchResults.hashtags.length === 0 && !isSearching && (
+              <div className="text-center py-12">
+                <Search className="w-12 h-12 text-flux-text-secondary mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-flux-text-primary mb-2">No results found</h3>
+                <p className="text-flux-text-secondary">Try a different search term</p>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'trending' && (
           <div className="space-y-6">
             <div>
               <h2 className="text-lg font-semibold text-flux-text-primary mb-4">

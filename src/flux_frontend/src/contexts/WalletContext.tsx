@@ -68,8 +68,8 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const nanoSeconds = BigInt(3600000000000);
 
   const network = import.meta.env.VITE_DFX_NETWORK || 'local';
-  const isLocal = network === 'local' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  
+  // Only treat localhost and 127.0.0.1 as local
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const identityProvider = !isLocal
     ? 'https://identity.ic0.app' 
     : `http://${import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'uzt4z-lp777-77774-qaabq-cai'}.localhost:4943`;

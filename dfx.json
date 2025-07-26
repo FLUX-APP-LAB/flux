@@ -19,7 +19,8 @@
       "frontend": {},
       "remote": {
         "id": {
-          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+          "playground": "rdmx6-jaaaa-aaaaa-aaadq-cai"
         }
       },
       "type": "custom",

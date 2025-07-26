@@ -47,8 +47,11 @@ export const fileToUint8Array = async (file: File): Promise<Uint8Array> => {
         
         resolve(uint8Array);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        reject(new Error(`File conversion failed: ${errorMessage}`));
+        if (error instanceof Error) {
+          reject(new Error(`File conversion failed: ${error.message}`));
+        } else {
+          reject(new Error('File conversion failed: Unknown error'));
+        }
       }
     };
     

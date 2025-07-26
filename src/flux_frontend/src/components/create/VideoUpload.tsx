@@ -24,7 +24,10 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { currentUser, videoFeed, setVideoFeed } = useAppStore();
-  const { newAuthActor, principal } = useWallet();
+<<<<<<< HEAD
+  const { newAuthActor } = useWallet();
+=======
+>>>>>>> parent of 66714e5 (feat: Implement video upload functionality with chunked uploads, metadata extraction, and enhanced validation in frontend and backend)
 
   const handleFileSelect = useCallback((file: File) => {
     if (file && file.type.startsWith('video/')) {
@@ -65,6 +68,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
     }
   };
 
+<<<<<<< HEAD
   const uploadVideo = async () => {
     if (!selectedFile) {
       toast.error('No video file selected');
@@ -119,99 +123,38 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
       };
 
       let thumbnail: number[] = [];
-      if (videoPreview) {
-        try {
-          thumbnail = await generateThumbnail(videoPreview);
-        } catch (err) {
-          console.warn('Thumbnail generation failed:', err);
-          thumbnail = [];
-        }
-      }
+  const simulateUpload = async () => {
+    setIsUploading(true);
+    setUploadProgress(0);
 
-      // Default values for demo; you may want to add UI for these
-      const videoType = { Short: null };
-      const category = { Entertainment: null };
-      const tags: string[] = [];
-      const hashtagsArr = hashtags.split(' ').filter(tag => tag.startsWith('#'));
-      const settings = {
-        ageRestricted: false,
-        allowComments: true,
-        allowDuets: false,
-        allowRemix: false,
-        isMonetized: false,
-        isPrivate: false,
-        isUnlisted: false,
-        scheduledAt: [],
-      };
-      setUploadProgress(10);
-      // Call backend
-      let result;
-      try {
-        result = await newAuthActor.uploadVideo(
-          title,
-          description,
-          videoData,
-          thumbnail,
-          videoType,
-          category,
-          tags,
-          hashtagsArr,
-          settings
-        );
-      } catch (err) {
-        // Network/CORS error handling
-        if (err instanceof TypeError && err.message.includes('NetworkError')) {
-          toast.error('Network error: Check backend CORS settings.');
-        } else {
-          const errorMessage = typeof err === 'object' && err !== null && 'message' in err
-            ? (err as { message?: string }).message
-            : undefined;
-          toast.error('Upload failed: ' + (errorMessage || 'Unknown error'));
-        }
-        throw err;
-      }
-      setUploadProgress(100);
-      if (result && 'ok' in result) {
-        toast.success('Video uploaded successfully!');
-        // Clean up preview URL
-        if (videoPreview) {
-          URL.revokeObjectURL(videoPreview);
-        }
-        setSelectedFile(null);
-        setVideoPreview(null);
-        onClose();
-      } else {
-        toast.error('Upload failed: ' + (result?.err || 'Unknown error'));
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      // Error already handled above
-    } finally {
-      setIsUploading(false);
+    // Simulate upload progress
+    for (let i = 0; i <= 100; i += 10) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      setUploadProgress(i);
     }
-  };
 
-  const removeVideo = () => {
-    if (videoPreview) {
-      URL.revokeObjectURL(videoPreview);
-    }
-    setSelectedFile(null);
-    setVideoPreview(null);
-  };
+    // Create new video object
+    const newVideo = {
+      id: Date.now().toString(),
+      title: title || 'Untitled Video',
+      thumbnail: videoPreview || 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=400&h=600&fit=crop',
+      videoUrl: videoPreview || 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4',
+      creator: currentUser!,
+      views: 0,
+      likes: 0,
+      duration: 180,
+      isLiked: false,
+      description,
+      hashtags: hashtags.split(' ').filter(tag => tag.startsWith('#')),
+    };
 
-  return (
-    <div className="space-y-6">
-      {!selectedFile ? (
-        <div
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          className="border-2 border-dashed border-flux-bg-tertiary rounded-xl p-12 text-center hover:border-flux-primary transition-colors cursor-pointer"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload className="w-12 h-12 text-flux-text-secondary mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-flux-text-primary mb-2">
-            Upload your video
-          </h3>
+    // Add to feed
+    setVideoFeed([newVideo, ...videoFeed]);
+    
+    setIsUploading(false);
+    toast.success('Video uploaded successfully!');
+    onClose();
+  };
           <p className="text-flux-text-secondary mb-4">
             Drag and drop your video here, or click to browse
           </p>
@@ -349,7 +292,11 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
               Cancel
             </Button>
             <Button
+<<<<<<< HEAD
               onClick={uploadVideo}
+=======
+              onClick={simulateUpload}
+>>>>>>> parent of 66714e5 (feat: Implement video upload functionality with chunked uploads, metadata extraction, and enhanced validation in frontend and backend)
               disabled={isUploading || !title.trim()}
               isLoading={isUploading}
               className="flex-1"

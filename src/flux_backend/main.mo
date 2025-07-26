@@ -957,31 +957,5 @@ actor UserManager {
     } {
         await contentModerationManager.getModerationStatsPublic()
     };
-    
-    public shared(msg) func uploadVideoChunk(
-        videoId: Text,
-        chunkData: Blob,
-        chunkIndex: Nat,
-        totalChunks: Nat
-    ) : async Result.Result<Text, Text> {
-        await videoManager.uploadVideoChunk(
-            msg.caller,
-            videoId,
-            chunkData,
-            chunkIndex,
-            totalChunks
-        )
-    };
-
-    public shared(_) func getUploadProgress(videoId: Text) : async Result.Result<Nat, Text> {
-        videoManager.getUploadProgress(videoId)
-    };
-
-    public shared(_) func updateProcessingProgress(
-        videoId: Text,
-        progress: Nat,
-        status: Text
-    ) : async Result.Result<(), Text> {
-        videoManager.updateProcessingProgress(videoId, progress, status)
-    };
+    // ...existing code...
 }

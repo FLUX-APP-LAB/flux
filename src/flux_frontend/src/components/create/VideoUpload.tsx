@@ -24,10 +24,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { currentUser, videoFeed, setVideoFeed } = useAppStore();
-<<<<<<< HEAD
   const { newAuthActor } = useWallet();
-=======
->>>>>>> parent of 66714e5 (feat: Implement video upload functionality with chunked uploads, metadata extraction, and enhanced validation in frontend and backend)
 
   const handleFileSelect = useCallback((file: File) => {
     if (file && file.type.startsWith('video/')) {
@@ -36,91 +33,72 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
       setVideoPreview(url);
     } else {
       toast.error('Please select a valid video file');
-    }
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    handleFileSelect(file);
-  }, [handleFileSelect]);
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFileSelect(file);
-  };
-
-  const togglePlayPause = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
-    }
-  };
-
-<<<<<<< HEAD
-  const uploadVideo = async () => {
-    if (!selectedFile) {
-      toast.error('No video file selected');
-      return;
-    }
-    if (!newAuthActor) {
-      toast.error('Not connected to backend. Please connect your wallet.');
-      return;
-    }
-    if (!principal) {
-      toast.error('No principal found. Please connect your wallet.');
-      return;
-    }
+  const simulateUpload = async () => {
     setIsUploading(true);
     setUploadProgress(0);
-    try {
-      // Read file as ArrayBuffer
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      // Convert to Uint8Array for candid blob
-      const videoData = Array.from(new Uint8Array(arrayBuffer));
 
-      // Generate thumbnail from first frame
-      const generateThumbnail = async (videoUrl: string): Promise<number[]> => {
-        return new Promise((resolve, reject) => {
-          const video = document.createElement('video');
-          video.src = videoUrl;
-          video.crossOrigin = 'anonymous';
-          video.muted = true;
-          video.playsInline = true;
-          video.currentTime = 0;
-          video.addEventListener('loadeddata', () => {
-            // Set canvas size to video size
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return reject('Canvas context error');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob((blob) => {
-              if (!blob) return reject('Thumbnail blob error');
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const arr = new Uint8Array(reader.result as ArrayBuffer);
-                resolve(Array.from(arr));
-              };
-              reader.onerror = () => reject('Thumbnail read error');
-              reader.readAsArrayBuffer(blob);
-            }, 'image/jpeg', 0.8);
-          });
-          video.onerror = () => reject('Video load error');
-        });
-      };
+    // Simulate upload progress
+    for (let i = 0; i <= 100; i += 10) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      setUploadProgress(i);
+    }
+
+    // Create new video object
+    const newVideo = {
+      id: Date.now().toString(),
+      title: title || 'Untitled Video',
+      thumbnail: videoPreview || 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=400&h=600&fit=crop',
+      videoUrl: videoPreview || 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4',
+      creator: currentUser!,
+      views: 0,
+      likes: 0,
+      duration: 180,
+      isLiked: false,
+      description,
+      hashtags: hashtags.split(' ').filter(tag => tag.startsWith('#')),
+    };
+
+    // Add to feed
+    setVideoFeed([newVideo, ...videoFeed]);
+    
+    setIsUploading(false);
+    toast.success('Video uploaded successfully!');
+    onClose();
+  };
+        );
+      } catch (err) {
+        // Network/CORS error handling
+        if (err instanceof TypeError && err.message.includes('NetworkError')) {
+          toast.error('Network error: Check backend CORS settings.');
+        } else {
+          const errorMessage = typeof err === 'object' && err !== null && 'message' in err
+            ? (err as { message?: string }).message
+            : undefined;
+          toast.error('Upload failed: ' + (errorMessage || 'Unknown error'));
+        }
+        throw err;
+      }
+      setUploadProgress(100);
+      if (result && 'ok' in result) {
+        toast.success('Video uploaded successfully!');
+        // Clean up preview URL
+        if (videoPreview) {
+          URL.revokeObjectURL(videoPreview);
+        }
+        setSelectedFile(null);
+        setVideoPreview(null);
+        onClose();
+      } else {
+        toast.error('Upload failed: ' + (result?.err || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      // Error already handled above
+    } finally {
+      setIsUploading(false);
+    }
+  };
+>>>>>>> parent of 421dca1 (Merge pull request #3 from Cybortex/follow-fxn)
 
       let thumbnail: number[] = [];
   const simulateUpload = async () => {

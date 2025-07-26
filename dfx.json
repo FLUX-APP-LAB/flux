@@ -23,8 +23,7 @@
         }
       },
       "type": "custom",
-      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz",
-      "init_args": "(opt variant {Development = record {allowed_derivation_origins = opt vec {\"http://localhost:3000\"; \"http://localhost:5173\"; \"http://localhost:8080\"}}})"
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
     }
   },
   "defaults": {

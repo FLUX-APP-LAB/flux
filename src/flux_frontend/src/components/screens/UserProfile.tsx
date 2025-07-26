@@ -5,10 +5,9 @@ import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { EditProfileModal } from '../profile/EditProfileModal';
 import { useAppStore } from '../../store/appStore';
-import { formatNumber } from '../../lib/utils';
+import { generateMockData, formatNumber } from '../../lib/utils';
 import { User, Video, LiveStream } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
-import { VideoService } from '../../lib/videoService';
 
 
 export const UserProfile: React.FC = () => {
@@ -56,25 +55,8 @@ export const UserProfile: React.FC = () => {
   const isOwnProfile = currentUser?.id === profileUser?.id;
 
   useEffect(() => {
-    const fetchUserVideos = async () => {
-      if (profileUser?.id) {
-        try {
-          const allVideos = await VideoService.fetchVideos();
-          // Filter videos to only show those uploaded by this user
-          const filteredVideos = allVideos.filter(video => video.user?.id === profileUser.id);
-          setUserVideos(filteredVideos);
-        } catch (error) {
-          console.error('Failed to fetch user videos:', error);
-          setUserVideos([]);
-        }
-      }
-    };
-    fetchUserVideos();
-  }, [profileUser?.id]);
-
-  useEffect(() => {
-    // For now, we'll keep mock streams since live streaming isn't fully implemented
-    const mockStreams: LiveStream[] = [];
+    const { mockVideos, mockStreams } = generateMockData();
+    setUserVideos(mockVideos.slice(0, 8));
     setUserStreams(mockStreams);
   }, []);
 

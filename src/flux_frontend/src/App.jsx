@@ -131,7 +131,6 @@ function App() {
             },
           }}
         />
-
       </div>
     </WalletProvider>
   );

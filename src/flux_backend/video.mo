@@ -8,7 +8,6 @@ import Nat "mo:base/Nat";
 import Int "mo:base/Int";
 import Blob "mo:base/Blob";
 import Char "mo:base/Char";
-import Iter "mo:base/Iter";
 
 module VideoManager {
     // Types
@@ -164,9 +163,6 @@ module VideoManager {
         // Chunked upload support
         private var videoChunks = HashMap.HashMap<Text, [(Nat, Blob)]>(0, Text.equal, Text.hash);
         
-        // Video data storage - separate from metadata for better performance
-        private var videoDataStorage = HashMap.HashMap<Text, Blob>(0, Text.equal, Text.hash);
-        
         // Core Video Functions
         public func uploadVideo(
         caller: Principal,
@@ -238,7 +234,7 @@ module VideoManager {
             title = title;
             description = description;
             thumbnail = thumbnail;
-            videoData = ?("video_" # videoId); // Storage reference to the video data
+            videoData = null; // Will be set after processing
             videoType = videoType;
             category = category;
             tags = tags;
@@ -264,30 +260,27 @@ module VideoManager {
                 retention = [];
             };
             comments = [];
-            status = #Ready; // Mark as ready immediately for simple uploads
+            status = #Processing;
             streamId = null;
             clipStartTime = null;
             clipEndTime = null;
             createdAt = Time.now();
             updatedAt = Time.now();
-            publishedAt = ?Time.now(); // Set published time
+            publishedAt = null;
             scheduledAt = settings.scheduledAt;
         };
         
         videos.put(videoId, video);
         
-        // Store the actual video data separately
-        videoDataStorage.put(videoId, videoData);
-        
-        // Create completed processing job for immediate availability
+        // Create processing job
         let jobId = "job_" # videoId;
         let job : VideoProcessingJob = {
             id = jobId;
             videoId = videoId;
-            status = "completed";
-            progress = 100;
+            status = "processing";
+            progress = 0;
             startTime = Time.now();
-            endTime = ?Time.now();
+            endTime = null;
             error = null;
         };
         
@@ -564,9 +557,7 @@ module VideoManager {
         } else {
             []
         }
-    };
-    
-    public func getTrendingVideos(category: ?VideoCategory, timeframe: Nat, limit: Nat) : [Video] {
+    };        public func getTrendingVideos(category: ?VideoCategory, timeframe: Nat, limit: Nat) : [Video] {
         // Return trending videos based on algorithm
         let allVideos = videos.vals();
         var filteredVideos : [Video] = [];
@@ -650,32 +641,7 @@ module VideoManager {
         } else {
             []
         }
-    };
-    
-    public func searchVideos(searchQuery: Text, category: ?VideoCategory, limit: Nat) : [Video] {
-        // If empty query, return all videos (filtered by category if specified)
-        if (Text.size(searchQuery) == 0) {
-            let allVideos = videos.vals()
-                |> Iter.filter(_, func(video: Video) : Bool {
-                    let categoryMatch = switch (category) {
-                        case null { true };
-                        case (?cat) { video.category == cat };
-                    };
-                    not video.isPrivate and video.status == #Ready and categoryMatch
-                })
-                |> Iter.toArray(_);
-            
-            // Sort by creation date (newest first)
-            let sortedVideos = Array.sort(allVideos, func(a: Video, b: Video) : {#less; #equal; #greater} {
-                if (a.createdAt > b.createdAt) { #less }
-                else if (a.createdAt < b.createdAt) { #greater }
-                else { #equal }
-            });
-            
-            let endIndex = Nat.min(limit, sortedVideos.size());
-            return Array.subArray(sortedVideos, 0, endIndex);
-        };
-        
+    };        public func searchVideos(searchQuery: Text, category: ?VideoCategory, limit: Nat) : [Video] {
         // Search videos by title, description, tags
         let allVideos = videos.vals();
         var matchingVideos : [Video] = [];
@@ -1013,64 +979,5 @@ module VideoManager {
         }
     };
     
-    // Get all public videos
-    public func getAllVideos() : async Result.Result<[Video], Text> {
-        let publicVideos = videos.vals()
-            |> Iter.filter(_, func(video: Video) : Bool {
-                not video.isPrivate and video.status == #Ready
-            })
-            |> Iter.toArray(_);
-        
-        // Sort by creation date (newest first)
-        let sortedVideos = Array.sort(publicVideos, func(a: Video, b: Video) : {#less; #equal; #greater} {
-            if (a.createdAt > b.createdAt) { #less }
-            else if (a.createdAt < b.createdAt) { #greater }
-            else { #equal }
-        });
-        
-        #ok(sortedVideos)
-    };
-
-    // Get videos by creator
-    public func getVideosByCreator(creator: Principal) : async Result.Result<[Video], Text> {
-        let userVideos = videos.vals()
-            |> Iter.filter(_, func(video: Video) : Bool {
-                video.creator == creator and not video.isPrivate and video.status == #Ready
-            })
-            |> Iter.toArray(_);
-        
-        let sortedVideos = Array.sort(userVideos, func(a: Video, b: Video) : {#less; #equal; #greater} {
-            if (a.createdAt > b.createdAt) { #less }
-            else if (a.createdAt < b.createdAt) { #greater }
-            else { #equal }
-        });
-        
-        #ok(sortedVideos)
-    };
-
-    // Get videos by category
-    public func getVideosByCategory(category: VideoCategory) : async Result.Result<[Video], Text> {
-        let categoryVideos = videos.vals()
-            |> Iter.filter(_, func(video: Video) : Bool {
-                video.category == category and not video.isPrivate and video.status == #Ready
-            })
-            |> Iter.toArray(_);
-        
-        let sortedVideos = Array.sort(categoryVideos, func(a: Video, b: Video) : {#less; #equal; #greater} {
-            if (a.createdAt > b.createdAt) { #less }
-            else if (a.createdAt < b.createdAt) { #greater }
-            else { #equal }
-        });
-        
-        #ok(sortedVideos)
-    };
-    
-    // Get video data for streaming/download
-    public func getVideoData(videoId: Text) : async Result.Result<Blob, Text> {
-        switch (videoDataStorage.get(videoId)) {
-            case (?data) { #ok(data) };
-            case null { #err("Video data not found") };
-        }
-    };
-  } // Close the VideoManager class
-} // Close the VideoManager module
+    }; // End of VideoManager class
+}

@@ -343,13 +343,6 @@ actor UserManager {
         // Update follower's following list
         switch (users.get(caller)) {
             case (?user) {
-                // Check if already following
-                for (following in user.following.vals()) {
-                    if (following == targetUser) {
-                        return #err("Already following this user");
-                    };
-                };
-                
                 let updatedFollowing = Array.append(user.following, [targetUser]);
                 let updatedUser = { user with following = updatedFollowing };
                 users.put(caller, updatedUser);
@@ -360,13 +353,6 @@ actor UserManager {
         // Update target user's followers list
         switch (users.get(targetUser)) {
             case (?user) {
-                // Check if already in followers list (redundant check, but ensuring consistency)
-                for (follower in user.followers.vals()) {
-                    if (follower == caller) {
-                        return #err("Already in followers list");
-                    };
-                };
-                
                 let updatedFollowers = Array.append(user.followers, [caller]);
                 let updatedUser = { user with followers = updatedFollowers };
                 users.put(targetUser, updatedUser);
@@ -552,32 +538,18 @@ actor UserManager {
 
     public query func searchUsers(searchQuery: Text, limit: Nat) : async [User] {
         let results = Buffer.Buffer<User>(0);
-        var count = 0;
-        
-        // If empty query, return all users (up to the limit)
-        if (Text.size(searchQuery) == 0) {
-            label allUsersLoop for ((_, user) in users.entries()) {
-                if (count >= limit) { break allUsersLoop };
-                results.add(user);
-                count += 1;
-            };
-            return Buffer.toArray(results);
-        };
-        
-        // Otherwise, perform search
         let lowerQuery = searchQuery; // Note: Text.toLowercase is not available in older versions
+        var count = 0;
         
         label searchLoop for ((_, user) in users.entries()) {
             if (count >= limit) { break searchLoop };
             
             let lowerUsername = user.username;
             let lowerDisplayName = user.displayName;
-            let lowerBio = user.bio;
             
-            // Enhanced substring matching
+            // Simple substring matching (case-sensitive for now)
             if (Text.contains(lowerUsername, #text lowerQuery) or 
-                Text.contains(lowerDisplayName, #text lowerQuery) or
-                Text.contains(lowerBio, #text lowerQuery)) {
+                Text.contains(lowerDisplayName, #text lowerQuery)) {
                 results.add(user);
                 count += 1;
             };
@@ -717,10 +689,6 @@ actor UserManager {
 
     public query func getVideosByUser(userId: Principal, limit: Nat, offset: Nat) : async [VideoManager.Video] {
         videoManager.getVideosByUser(userId, limit, offset)
-    };
-
-    public func getAllVideos() : async Result.Result<[VideoManager.Video], Text> {
-        await videoManager.getAllVideos()
     };
 
     public query func getTrendingVideos(category: ?VideoManager.VideoCategory, timeframe: Nat, limit: Nat) : async [VideoManager.Video] {
@@ -1003,13 +971,13 @@ actor UserManager {
             chunkIndex,
             totalChunks
         )
-    }
-    public shared(_msg) func getUploadProgress(videoId: Text) : async Result.Result<Nat, Text> {
+    };
+
+    public shared(_) func getUploadProgress(videoId: Text) : async Result.Result<Nat, Text> {
         videoManager.getUploadProgress(videoId)
     };
 
-    public shared(_msg) func updateProcessingProgress(
-
+    public shared(_) func updateProcessingProgress(
         videoId: Text,
         progress: Nat,
         status: Text

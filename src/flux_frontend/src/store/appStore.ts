@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { VideoService, FrontendVideo } from '../lib/videoService';
 
 export interface User {
   id: string;
@@ -17,8 +16,6 @@ export interface User {
   bio?: string;
   website?: string[]; // changed from string to string[]
   location?: string;
-  followers?: string[]; // Array of user IDs who follow this user
-  following?: string[]; // Array of user IDs this user follows
   socialLinks?: {
     twitter?: string[];
     instagram?: string[];

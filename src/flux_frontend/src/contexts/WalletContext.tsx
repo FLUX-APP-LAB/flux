@@ -62,8 +62,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   
-  // Longer session - 30 days
-  const days = BigInt(30);
+  const days = BigInt(1);
   const hours = BigInt(24);
   const nanoSeconds = BigInt(3600000000000);
 
@@ -74,33 +73,15 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     ? 'https://identity.ic0.app' 
     : `http://${import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'uzt4z-lp777-77774-qaabq-cai'}.localhost:4943`;
 
-  // Custom storage adapter for AuthClient using localStorage
-  const localStorageAdapter = {
-    get: async (key: string) => {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : null;
-    },
-    set: async (key: string, value: any) => {
-      localStorage.setItem(key, JSON.stringify(value));
-    },
-    remove: async (key: string) => {
-      localStorage.removeItem(key);
-    }
-  };
-
   const defaultOptions = {
     createOptions: {
       idleOptions: {
         disableIdle: true,
-        disableDefaultIdleCallback: true, // Disable automatic logout
       },
-      storage: localStorageAdapter, // Use our custom adapter
     },
     loginOptions: {
       identityProvider,
       maxTimeToLive: days * hours * nanoSeconds,
-      // Use current origin as derivation origin to fix the mismatch
-      derivationOrigin: window.location.origin,
     },
   };
 
@@ -108,71 +89,8 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   // Helper to fetch and set current user in store
   const fetchAndSetCurrentUser = async (userPrincipal: string) => {
-    let user = await getUser(userPrincipal);
-    
-    // If user doesn't exist, create them automatically
-    if (!user && newAuthActor) {
-      console.log('User not found, creating default user for principal:', userPrincipal);
-      try {
-        // Generate a default username and display name based on principal
-        const principalShort = userPrincipal.slice(0, 8);
-        const defaultUsername = 'user_' + principalShort;
-        const defaultDisplayName = 'User ' + principalShort;
-        
-        console.log('Creating user with:', { defaultUsername, defaultDisplayName });
-        
-        const createResult = await newAuthActor.createUser(
-          defaultUsername,
-          defaultDisplayName,
-          [], // no email
-          []  // no avatar
-        );
-        
-        if ('ok' in createResult) {
-          console.log('User created successfully:', createResult.ok);
-          // Fetch the newly created user to get the complete profile
-          user = await getUser(userPrincipal);
-          if (user) {
-            console.log('Created user profile:', {
-              username: user.username,
-              displayName: user.displayName,
-              id: user.id
-            });
-          }
-        } else {
-          console.error('Failed to create user:', createResult.err);
-          // If username exists, try with a random suffix
-          if (createResult.err.includes('already exists')) {
-            const randomSuffix = Math.random().toString(36).substring(2, 6);
-            const fallbackUsername = 'user_' + principalShort + '_' + randomSuffix;
-            console.log('Retrying with fallback username:', fallbackUsername);
-            
-            const retryResult = await newAuthActor.createUser(
-              fallbackUsername,
-              defaultDisplayName,
-              [],
-              []
-            );
-            
-            if ('ok' in retryResult) {
-              console.log('User created with fallback username:', retryResult.ok);
-              user = await getUser(userPrincipal);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error creating user:', error);
-      }
-    }
-    
-    if (user) {
-      console.log('Setting current user:', {
-        username: user.username,
-        displayName: user.displayName,
-        principal: user.principal
-      });
-      setCurrentUser(user);
-    }
+    const user = await getUser(userPrincipal);
+    if (user) setCurrentUser(user);
     return user;
   };
 
@@ -185,53 +103,17 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       console.log('Initializing AuthClient...', { 
         isLocal, 
         identityProvider,
-        network,
-        origin: window.location.origin 
+        network 
       });
       
-      // Create and initialize the auth client with our custom storage adapter
       const client = await AuthClient.create(defaultOptions.createOptions);
       setAuthClient(client);
       
-      // Check if the user is already authenticated
       const isAuthenticated = await client.isAuthenticated();
       console.log('Authentication status:', isAuthenticated);
       
-      // Try to restore session even if isAuthenticated returns false (belt and suspenders)
-      const storedPrincipal = localStorage.getItem('flux_user_principal');
-      console.log('Stored principal:', storedPrincipal);
-      
       if (isAuthenticated) {
-        // Verify that we actually have a valid identity
-        try {
-          const identity = await client.getIdentity();
-          const principalId = identity.getPrincipal().toString();
-          
-          if (identity && principalId !== '2vxsx-fae') { // Anonymous principal check
-            console.log('Valid identity found, restoring session...', principalId);
-            await handleAuthenticated(client);
-            return; // Successfully restored session
-          } else {
-            console.warn('Invalid or anonymous identity found, will require login');
-            // Clear problematic auth state
-            await client.logout();
-          }
-        } catch (err) {
-          console.error('Error checking identity during initialization:', err);
-          // If there's any error with identity, ensure we're properly logged out
-          await client.logout();
-        }
-      } else if (storedPrincipal && storedPrincipal !== '2vxsx-fae') {
-        // Try alternative login approach if we have a stored principal
-        console.log('Attempting to restore session from stored principal...');
-        try {
-          // Force a login prompt which should pick up the stored delegation if it exists
-          await login();
-        } catch (err) {
-          console.error('Failed to restore session from stored principal:', err);
-          // Clean up any problematic stored data
-          localStorage.removeItem('flux_user_principal');
-        }
+        await handleAuthenticated(client);
       }
     } catch (error) {
       console.error("Authentication initialization error:", error);
@@ -240,28 +122,15 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   async function handleAuthenticated(client: AuthClient) {
     try {
-      // Get identity from auth client
       const identity = await client.getIdentity();
-      console.log('Identity retrieved:', identity);
-      
-      // Validate identity isn't anonymous
+      console.log('identity :>> ', identity);
+      setIdentity(identity);
+      setIsAuthenticated(true);
+
       const principal = identity.getPrincipal();
       const principalIdFull = principal.toString();
-      
-      if (principalIdFull === '2vxsx-fae') {
-        console.warn('Anonymous principal detected, rejecting authentication');
-        await client.logout();
-        return;
-      }
-      
-      // Store identity in state
-      setIdentity(identity);
       setPrincipal(principalIdFull);
-      setIsAuthenticated(true);
-      
-      // Persist principal ID for quick recovery
-      localStorage.setItem('flux_user_principal', principalIdFull);
-      
+
       console.log('Creating HttpAgent...', {
         isLocal,
         host: isLocal ? 'http://localhost:4943' : 'https://ic0.app'
@@ -345,35 +214,15 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     if (!authClient) return;
     
     try {
-      // Clear up authentication with Internet Identity
       await authClient.logout();
-      
-      // Clear local storage data
-      localStorage.removeItem('flux_user_principal');
-      localStorage.removeItem('ic-identity');
-      localStorage.removeItem('ic-delegation');
-      
-      // Clear local state
       setIdentity(null);
       setAuthActor(null);
       setIsAuthenticated(false);
       setPrincipal("");
       setBalance(null);
       setTransactions([]);
-      setCurrentUser(null);
-      
-      // Clear persisted data
-      localStorage.removeItem('flux_user_principal');
-      
-      console.log('User logged out successfully');
     } catch (error) {
       console.error('Error logging out:', error);
-      
-      // Force clear state even if logout fails
-      setIdentity(null);
-      setAuthActor(null);
-      setIsAuthenticated(false);
-      setPrincipal("");
     }
   }
 

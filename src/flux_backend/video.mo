@@ -9,6 +9,8 @@ import Int "mo:base/Int";
 import Blob "mo:base/Blob";
 import Char "mo:base/Char";
 import Iter "mo:base/Iter";
+import Float "mo:base/Float";
+import ChunkedUpload "./chunkedupload";
 
 module VideoManager {
     // Types
@@ -45,6 +47,10 @@ module VideoManager {
         #P1440;
         #P2160;
     };
+
+    // Chunked upload types
+    public type ChunkInfo = ChunkedUpload.ChunkInfo;
+    public type StreamChunk = ChunkedUpload.StreamChunk;
 
     public type VideoStatus = {
         #Processing;
@@ -161,11 +167,11 @@ module VideoManager {
         private var playlists = HashMap.HashMap<Text, Playlist>(0, Text.equal, Text.hash);
         private var _videoTags = HashMap.HashMap<Text, [Text]>(0, Text.equal, Text.hash);
 
-        // Chunked upload support
-        private var videoChunks = HashMap.HashMap<Text, [(Nat, Blob)]>(0, Text.equal, Text.hash);
-        
-        // Video data storage - separate from metadata for better performance
+        // Legacy video data storage - deprecated in favor of chunked upload system
         private var videoDataStorage = HashMap.HashMap<Text, Blob>(0, Text.equal, Text.hash);
+        
+        // Chunked upload manager
+        private var chunkUploadManager = ChunkedUpload.ChunkedUploadService();
         
         // Core Video Functions
         public func uploadVideo(
@@ -967,54 +973,8 @@ module VideoManager {
         #ok(videoId)
     };
 
-    public func uploadVideoChunk(
-        caller: Principal,
-        videoId: Text,
-        chunkData: Blob,
-        chunkIndex: Nat,
-        totalChunks: Nat
-    ) : async Result.Result<Text, Text> {
-        switch (videos.get(videoId)) {
-            case null { #err("Video not found") };
-            case (?video) {
-                if (video.creator != caller) {
-                    return #err("Unauthorized");
-                };
-                
-                if (Blob.toArray(chunkData).size() > 2_000_000) {
-                    return #err("Chunk too large");
-                };
-                
-                let existingChunks = switch (videoChunks.get(videoId)) {
-                    case null { [] };
-                    case (?chunks) { chunks };
-                };
-                
-                let newChunks = Array.append(existingChunks, [(chunkIndex, chunkData)]);
-                videoChunks.put(videoId, newChunks);
-                
-                if (newChunks.size() == totalChunks) {
-                    let updatedVideo = {
-                        video with
-                        videoData = ?("video_" # videoId);
-                        status = #Ready;
-                        updatedAt = Time.now();
-                        publishedAt = ?Time.now();
-                    };
-                    
-                    videos.put(videoId, updatedVideo);
-                    videoChunks.delete(videoId);
-                    
-                    #ok("Video chunks combined successfully")
-                } else {
-                    #ok("Chunk " # Nat.toText(chunkIndex + 1) # "/" # Nat.toText(totalChunks) # " uploaded")
-                }
-            };
-        }
-    };
-    
     // Get all public videos
-    public func getAllVideos() : async Result.Result<[Video], Text> {
+    public func getAllVideos() : Result.Result<[Video], Text> {
         let publicVideos = videos.vals()
             |> Iter.filter(_, func(video: Video) : Bool {
                 not video.isPrivate and video.status == #Ready
@@ -1065,12 +1025,179 @@ module VideoManager {
         #ok(sortedVideos)
     };
     
-    // Get video data for streaming/download
+    // Legacy video data retrieval - for backward compatibility
     public func getVideoData(videoId: Text) : async Result.Result<Blob, Text> {
         switch (videoDataStorage.get(videoId)) {
             case (?data) { #ok(data) };
             case null { #err("Video data not found") };
         }
+    };
+    
+    // Chunked Upload Functions
+    
+    // Initialize chunked upload session
+    public func initializeChunkedUpload(
+        caller: Principal,
+        fileName: Text,
+        totalSize: Nat,
+        contentType: Text,
+        expectedChecksum: ?Text
+    ) : async Result.Result<Text, Text> {
+        chunkUploadManager.initializeUpload(caller, fileName, totalSize, contentType, expectedChecksum)
+    };
+    
+    // Upload a single chunk
+    public func uploadChunk(
+        caller: Principal,
+        sessionId: Text,
+        chunkInfo: ChunkedUpload.ChunkInfo
+    ) : async Result.Result<{uploaded: Nat; total: Nat}, Text> {
+        chunkUploadManager.uploadChunk(caller, sessionId, chunkInfo)
+    };
+    
+    // Finalize upload and create video record
+    public func finalizeChunkedUpload(
+        caller: Principal,
+        sessionId: Text,
+        title: Text,
+        description: Text,
+        thumbnail: ?Blob,
+        videoType: VideoType,
+        category: VideoCategory,
+        tags: [Text],
+        hashtags: [Text],
+        settings: {
+            isPrivate: Bool;
+            isUnlisted: Bool;
+            allowComments: Bool;
+            allowDuets: Bool;
+            allowRemix: Bool;
+            isMonetized: Bool;
+            ageRestricted: Bool;
+            scheduledAt: ?Int;
+        }
+    ) : async Result.Result<Text, Text> {
+        // Finalize the chunked upload first
+        switch (chunkUploadManager.finalizeUpload(caller, sessionId)) {
+            case (#ok(videoId)) {
+                // Create video metadata record
+                let video: Video = {
+                    id = videoId;
+                    creator = caller;
+                    title = title;
+                    description = description;
+                    thumbnail = thumbnail;
+                    videoType = videoType;
+                    category = category;
+                    tags = tags;
+                    hashtags = hashtags;
+                    language = "en"; // Default language
+                    isPrivate = settings.isPrivate;
+                    isUnlisted = settings.isUnlisted;
+                    allowComments = settings.allowComments;
+                    allowDuets = settings.allowDuets;
+                    allowRemix = settings.allowRemix;
+                    isMonetized = settings.isMonetized;
+                    ageRestricted = settings.ageRestricted;
+                    videoData = ?videoId; // Reference to the video data
+                    metadata = {
+                        duration = 0; // Will be updated during processing
+                        resolution = "1080p";
+                        frameRate = 30;
+                        bitrate = 5000;
+                        codec = "H.264";
+                        fileSize = 0; // Will be updated
+                        uploadDate = Time.now();
+                        processedDate = null;
+                    };
+                    analytics = {
+                        views = 0;
+                        likes = 0;
+                        dislikes = 0;
+                        shares = 0;
+                        comments = 0;
+                        averageWatchTime = 0;
+                        clickThroughRate = 0.0;
+                        engagement = 0.0;
+                        retention = [];
+                    };
+                    comments = [];
+                    status = #Ready; // Chunked uploads are ready immediately
+                    streamId = null;
+                    clipStartTime = null;
+                    clipEndTime = null;
+                    createdAt = Time.now();
+                    updatedAt = Time.now();
+                    publishedAt = ?Time.now();
+                    scheduledAt = settings.scheduledAt;
+                };
+                
+                videos.put(videoId, video);
+                
+                // Create completed processing job
+                let jobId = "job_" # videoId;
+                let job : VideoProcessingJob = {
+                    id = jobId;
+                    videoId = videoId;
+                    status = "completed";
+                    progress = 100;
+                    startTime = Time.now();
+                    endTime = ?Time.now();
+                    error = null;
+                };
+                
+                processingJobs.put(jobId, job);
+                
+                #ok(videoId)
+            };
+            case (#err(error)) {
+                #err(error)
+            };
+        }
+    };
+    
+    // Get upload progress
+    public func getChunkedUploadProgress(sessionId: Text) : Result.Result<{uploaded: Nat; total: Nat; percentage: Float}, Text> {
+        chunkUploadManager.getUploadProgress(sessionId)
+    };
+    
+    // Get missing chunks for resume capability
+    public func getMissingChunks(sessionId: Text) : Result.Result<[Nat], Text> {
+        chunkUploadManager.getMissingChunks(sessionId)
+    };
+    
+    // Cancel upload session
+    public func cancelChunkedUpload(caller: Principal, sessionId: Text) : async Result.Result<(), Text> {
+        chunkUploadManager.cancelUpload(caller, sessionId)
+    };
+    
+    // Streaming Functions
+    
+    // Get video stream chunk for progressive download
+    public func getVideoStreamChunk(
+        videoId: Text,
+        chunkIndex: Nat,
+        chunkSize: ?Nat
+    ) : Result.Result<ChunkedUpload.StreamChunk, Text> {
+        chunkUploadManager.getStreamChunk(videoId, chunkIndex, chunkSize)
+    };
+    
+    // Get video streaming information
+    public func getVideoStreamInfo(videoId: Text) : Result.Result<{totalSize: Nat; totalChunks: Nat; chunkSize: Nat}, Text> {
+        chunkUploadManager.getVideoStreamInfo(videoId)
+    };
+    
+    // Administrative functions for chunked uploads
+    public func cleanupExpiredUploadSessions() : Nat {
+        chunkUploadManager.cleanupExpiredSessions()
+    };
+    
+    public func getActiveUploadSessionsCount() : Nat {
+        chunkUploadManager.getActiveSessionsCount()
+    };
+    
+    public func getStoredVideosCount() : Nat {
+        chunkUploadManager.getStoredVideosCount()
     };
   } 
 } 

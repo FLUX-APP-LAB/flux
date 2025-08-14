@@ -1,7 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { TrendingUp, Flame, Calendar, Award } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { VideoService } from '../../lib/videoService';
+import { useWallet } from '../../hooks/useWallet';
+import { formatNumber } from '../../lib/utils';
 
 export const TrendingScreen: React.FC = () => {
+  const [trendingVideos, setTrendingVideos] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { newAuthActor } = useWallet();
+
+  useEffect(() => {
+    const loadTrendingData = async () => {
+      setIsLoading(true);
+      try {
+        if (newAuthActor) {
+          console.log('Loading trending data from backend...');
+          const videoService = new VideoService(newAuthActor);
+          const trending = await videoService.getTrendingVideos();
+          setTrendingVideos(trending.slice(0, 10)); // Show top 10
+          console.log(`Loaded ${trending.length} trending videos`);
+        }
+      } catch (error) {
+        console.error('Error loading trending data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTrendingData();
+  }, [newAuthActor]);
+
   return (
     <div className="min-h-screen bg-flux-bg-primary pt-20 md:pt-20 lg:pt-6 px-4 md:px-6">
       <div className="max-w-6xl mx-auto">
@@ -27,15 +56,37 @@ export const TrendingScreen: React.FC = () => {
               <h2 className="text-lg font-semibold text-flux-text-primary">Hot Videos</h2>
             </div>
             <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center space-x-3 p-3 bg-flux-bg-tertiary rounded-lg">
-                  <div className="w-16 h-12 bg-flux-bg-primary rounded-lg"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-flux-text-primary">Trending Video #{i}</p>
-                    <p className="text-xs text-flux-text-secondary">1.2M views • 2 hours ago</p>
-                  </div>
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-flux-accent-red mx-auto mb-2"></div>
+                  <p className="text-flux-text-secondary text-sm">Loading trending videos...</p>
                 </div>
-              ))}
+              ) : trendingVideos.length > 0 ? (
+                trendingVideos.slice(0, 3).map((video, index) => (
+                  <motion.div
+                    key={video.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex items-center space-x-3 p-3 bg-flux-bg-tertiary rounded-lg"
+                  >
+                    <div 
+                      className="w-16 h-12 bg-flux-bg-primary rounded-lg bg-cover bg-center"
+                      style={{ backgroundImage: `url(${video.thumbnail})` }}
+                    ></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-flux-text-primary line-clamp-1">{video.title}</p>
+                      <p className="text-xs text-flux-text-secondary">
+                        {formatNumber(video.views)} views • @{video.creator.username}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-flux-text-secondary text-sm">No trending videos available</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -69,3 +120,5 @@ export const TrendingScreen: React.FC = () => {
     </div>
   );
 };
+
+export default TrendingScreen;

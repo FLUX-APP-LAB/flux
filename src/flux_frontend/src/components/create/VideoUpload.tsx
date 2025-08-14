@@ -5,13 +5,13 @@ import { Button } from '../ui/Button';
 import { useAppStore } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
 import { VideoService } from '../../lib/videoService';
+import { ChunkedUploadService } from '../../lib/chunkedUploadService';
 import { 
   validateVideoFile, 
   extractVideoMetadata, 
   formatFileSize,
   formatDuration,
   getVideoType,
-  fileToUint8Array,
   generateThumbnail,
   mapCategoryToBackend
 } from '../../lib/videoUtils';
@@ -40,6 +40,10 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
   const [allowComments, setAllowComments] = useState<boolean>(true);
   const [allowDuets, setAllowDuets] = useState<boolean>(true);
   const [allowRemix, setAllowRemix] = useState<boolean>(true);
+  const [chunksUploaded, setChunksUploaded] = useState(0);
+  const [totalChunks, setTotalChunks] = useState(0);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [canResume, setCanResume] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -98,33 +102,30 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
     setUploadStatus('uploading');
 
     try {
-      // Convert file to Uint8Array for Motoko backend
-      toast.loading('Converting video file...');
-      const videoData = await fileToUint8Array(selectedFile);
-      
-      setUploadProgress(20);
+      console.log('Starting chunked upload for file:', selectedFile.name, 'Size:', selectedFile.size);
       
       // Generate thumbnail
       toast.loading('Generating thumbnail...');
       const thumbnailBlob = await generateThumbnail(selectedFile);
-      const thumbnailData = await fileToUint8Array(new File([thumbnailBlob], 'thumbnail.jpg'));
+      const thumbnailArrayBuffer = await thumbnailBlob.arrayBuffer();
+      const thumbnailData = new Uint8Array(thumbnailArrayBuffer);
       
-      setUploadProgress(40);
+      setUploadProgress(10);
       
-      // Prepare upload data
+      // Prepare metadata
       const videoType = videoMetadata ? getVideoType(videoMetadata.duration) : 'Short';
       const processedHashtags = hashtags
         .split(' ')
         .filter(tag => tag.startsWith('#') && tag.length > 1)
         .map(tag => tag.slice(1)); // Remove # symbol
       
-      const uploadData = {
+      const metadata = {
         title: title.trim() || 'Untitled Video',
         description: description.trim(),
-        videoType: { [videoType]: null },
-        category: { [mapCategoryToBackend(category)]: null },
-        tags: [],
+        category: mapCategoryToBackend(category),
+        tags: [] as string[],
         hashtags: processedHashtags,
+        thumbnail: thumbnailData,
         settings: {
           isPrivate,
           isUnlisted,
@@ -133,39 +134,39 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
           allowRemix,
           isMonetized: false,
           ageRestricted: false,
-          scheduledAt: [],
+          scheduledAt: undefined,
         }
       };
+
+      setUploadProgress(20);
       
-      setUploadProgress(60);
-      setUploadStatus('processing');
-      toast.loading('Uploading to backend...');
+      // Create chunked upload service
+      const uploadService = new ChunkedUploadService(newAuthActor);
       
-      // Call backend upload function
-      const result = await newAuthActor.uploadVideo(
-        uploadData.title,
-        uploadData.description,
-        videoData,
-        [thumbnailData],
-        uploadData.videoType,
-        uploadData.category,
-        uploadData.tags,
-        uploadData.hashtags,
-        uploadData.settings
+      // Upload with progress tracking
+      const videoId = await uploadService.uploadFile(
+        selectedFile,
+        metadata,
+        // Progress callback
+        (progress) => {
+          const progressPercent = 20 + (progress.percentage * 0.7); // 20-90% for upload
+          setUploadProgress(progressPercent);
+          setChunksUploaded(progress.uploaded);
+          setTotalChunks(progress.total);
+          
+          console.log(`Upload progress: ${progress.uploaded}/${progress.total} chunks (${progress.percentage.toFixed(1)}%)`);
+        },
+        // Chunk complete callback
+        (chunkIndex, totalChunks) => {
+          console.log(`Chunk ${chunkIndex + 1}/${totalChunks} uploaded successfully`);
+        }
       );
       
-      if (!('ok' in result)) {
-        throw new Error(result.err || 'Upload failed');
-      }
+      setUploadProgress(95);
+      setUploadStatus('processing');
+      toast.loading('Finalizing upload...');
       
-      setUploadProgress(100);
-      setUploadStatus('complete');
-      
-      console.log('Video uploaded successfully with ID:', result.ok);
-      toast.success('Video uploaded successfully!');
-      
-      // Trigger immediate refresh of video feed to show the new video
-      // This will help other users see the video faster
+      // Refresh video feed
       try {
         const videoService = new VideoService(newAuthActor);
         const updatedVideos = await videoService.getAllVideos();
@@ -175,16 +176,80 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
         console.error('Failed to refresh video feed after upload:', error);
       }
       
+      setUploadProgress(100);
+      setUploadStatus('complete');
+      
+      console.log('Chunked upload completed successfully. Video ID:', videoId);
+      toast.success('Video uploaded successfully!');
+      
       setTimeout(() => onClose(), 1000);
       
     } catch (error) {
       setUploadStatus('error');
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       toast.error(errorMessage);
-      console.error(error);
+      console.error('Chunked upload failed:', error);
+      
+      // Store session ID for potential resume
+      if (error instanceof Error && error.message.includes('session')) {
+        const sessionId = extractSessionIdFromError(error.message);
+        if (sessionId) {
+          setCurrentSessionId(sessionId);
+          setCanResume(true);
+        }
+      }
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const resumeUpload = async () => {
+    if (!selectedFile || !currentSessionId || !newAuthActor) {
+      toast.error('Cannot resume upload - missing data');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadStatus('uploading');
+    
+    try {
+      const uploadService = new ChunkedUploadService(newAuthActor);
+      
+      await uploadService.resumeUpload(
+        currentSessionId,
+        selectedFile,
+        // Progress callback
+        (progress) => {
+          const progressPercent = 20 + (progress.percentage * 0.7);
+          setUploadProgress(progressPercent);
+          setChunksUploaded(progress.uploaded);
+          setTotalChunks(progress.total);
+        },
+        // Chunk complete callback
+        (chunkIndex, totalChunks) => {
+          console.log(`Resumed chunk ${chunkIndex + 1}/${totalChunks} uploaded`);
+        }
+      );
+      
+      setUploadProgress(100);
+      setUploadStatus('complete');
+      toast.success('Upload resumed and completed successfully!');
+      setCanResume(false);
+      
+      setTimeout(() => onClose(), 1000);
+      
+    } catch (error) {
+      setUploadStatus('error');
+      toast.error('Failed to resume upload');
+      console.error('Resume upload failed:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const extractSessionIdFromError = (errorMessage: string): string | null => {
+    const match = errorMessage.match(/session[:\s]+([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
   };
 
   const removeVideo = () => {
@@ -341,17 +406,36 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             {/* Current Action */}
             <div className="text-center pt-2">
               <p className="text-sm text-flux-text-secondary">
-                {uploadProgress < 10 && "Converting video file..."}
+                {uploadProgress < 10 && "Preparing video file..."}
                 {uploadProgress >= 10 && uploadProgress < 20 && "Generating thumbnail..."}
-                {uploadProgress >= 20 && uploadProgress < 30 && "Preparing upload..."}
-                {uploadProgress >= 30 && uploadProgress < 40 && "Checking file size..."}
-                {uploadProgress >= 40 && uploadProgress < 90 && "Uploading video chunks..."}
+                {uploadProgress >= 20 && uploadProgress < 90 && "Uploading video chunks..."}
                 {uploadProgress >= 90 && uploadProgress < 100 && "Finalizing upload..."}
-                {uploadProgress >= 100 && uploadStatus === 'processing' && "Processing video..."}
+                {uploadStatus === 'processing' && "Processing video..."}
                 {uploadStatus === 'complete' && "Video successfully published!"}
                 {uploadStatus === 'error' && "Upload failed. Please try again."}
               </p>
+              
+              {/* Chunk progress for chunked uploads */}
+              {totalChunks > 0 && uploadStatus === 'uploading' && (
+                <div className="text-xs text-flux-text-secondary mt-1">
+                  Uploaded {chunksUploaded} of {totalChunks} chunks
+                </div>
+              )}
             </div>
+
+            {/* Resume Upload Button */}
+            {canResume && uploadStatus === 'error' && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  onClick={resumeUpload}
+                  className="px-8"
+                  variant="primary"
+                  disabled={isUploading}
+                >
+                  Resume Upload
+                </Button>
+              </div>
+            )}
 
             {/* Cancel Button - Only show during early stages */}
             {uploadProgress < 60 && uploadStatus !== 'complete' && uploadStatus !== 'error' && (

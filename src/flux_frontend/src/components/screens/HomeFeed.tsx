@@ -6,21 +6,59 @@ import { useAppStore } from '../../store/appStore';
 import { generateMockData } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
+import { VideoService } from '../../lib/videoService';
+import { useWallet } from '../../hooks/useWallet';
 
 export const HomeFeed: React.FC = () => {
   const { videoFeed, currentVideoIndex, setVideoFeed, setCurrentVideoIndex, currentUser, setActivePage, activePage } = useAppStore();
   const [feedType, setFeedType] = useState<'foryou' | 'following' | 'trending'>('foryou');
+  const [isLoading, setIsLoading] = useState(true);
+  const { newAuthActor } = useWallet();
 
   useEffect(() => {
-    const { mockVideos } = generateMockData();
-    setVideoFeed(mockVideos);
-  }, [setVideoFeed]);
+    const loadVideos = async () => {
+      setIsLoading(true);
+      try {
+        if (newAuthActor) {
+          console.log('Loading videos from backend using VideoService...');
+          const videoService = new VideoService(newAuthActor);
+          
+          let videos;
+          if (feedType === 'trending') {
+            videos = await videoService.getTrendingVideos();
+          } else if (feedType === 'following') {
+            // For now, load all videos - could be enhanced to filter by followed users
+            videos = await videoService.getAllVideos();
+          } else {
+            // For You feed - load all videos
+            videos = await videoService.getAllVideos();
+          }
+          
+          console.log(`Loaded ${videos.length} videos from backend for feed type: ${feedType}`);
+          setVideoFeed(videos);
+        } else {
+          console.log('No actor available, using mock data...');
+          const { mockVideos } = generateMockData();
+          setVideoFeed(mockVideos);
+        }
+      } catch (error) {
+        console.error('Error loading videos:', error);
+        // Fallback to mock data on error
+        const { mockVideos } = generateMockData();
+        setVideoFeed(mockVideos);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadVideos();
+  }, [setVideoFeed, newAuthActor, feedType]);
 
   // Set feed type based on active page
   useEffect(() => {
     if (activePage === 'following') {
       setFeedType('following');
-    } else if (activePage === 'discover') {
+    } else if (activePage === 'discover' || activePage === 'trending') {
       setFeedType('trending');
     } else {
       setFeedType('foryou');
@@ -103,17 +141,28 @@ export const HomeFeed: React.FC = () => {
       </div>
 
       {/* Video Feed */}
-      <div
-        className="h-full snap-y snap-mandatory overflow-y-scroll"
-        onScroll={handleScroll}
-      >
-        <AnimatePresence mode="wait">
+      {isLoading ? (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <p className="text-white/70">Loading videos...</p>
+          </div>
+        </div>
+      ) : videoFeed.length === 0 ? (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-white/70 text-lg mb-2">No videos available</p>
+            <p className="text-white/50 text-sm">Upload some videos to get started!</p>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="h-full snap-y snap-mandatory overflow-y-scroll"
+          onScroll={handleScroll}
+        >
           {videoFeed.map((video, index) => (
-            <motion.div
-              key={video.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
+              key={`video-${video.id}`}
               className="h-screen snap-start"
             >
               <VideoPlayer
@@ -122,13 +171,13 @@ export const HomeFeed: React.FC = () => {
                 onVideoEnd={handleVideoEnd}
                 className="w-full h-full"
               />
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
-      </div>
+        </div>
+      )}
 
       {/* Loading indicator for infinite scroll */}
-      {videoFeed.length > 0 && (
+      {!isLoading && videoFeed.length > 0 && (
         <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 text-white/50 text-sm">
           {currentVideoIndex + 1} / {videoFeed.length}
         </div>

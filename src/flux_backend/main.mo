@@ -17,7 +17,7 @@ import AnalyticsManager "analytics";
 import NotificationManager "notification";
 import ContentModerationManager "contentmoderation";
 
-actor UserManager {
+persistent actor UserManager {
     // Types
     type UserTier = {
         #Free;
@@ -162,38 +162,38 @@ actor UserManager {
     };
 
     // State
-    private stable var usersEntries : [(Principal, User)] = [];
-    private stable var usernamesEntries : [(Text, Principal)] = [];
-    private stable var subscriptionsEntries : [(Text, Subscription)] = [];
-    private stable var userSessionsEntries : [(Principal, Int)] = [];
-    private stable var suspendedUsersEntries : [(Principal, (Text, Int))] = [];
+    private var usersEntries : [(Principal, User)] = [];
+    private var usernamesEntries : [(Text, Principal)] = [];
+    private var subscriptionsEntries : [(Text, Subscription)] = [];
+    private var userSessionsEntries : [(Principal, Int)] = [];
+    private var suspendedUsersEntries : [(Principal, (Text, Int))] = [];
     
-    private var users = HashMap.fromIter<Principal, User>(usersEntries.vals(), usersEntries.size(), Principal.equal, Principal.hash);
-    private var usernames = HashMap.fromIter<Text, Principal>(usernamesEntries.vals(), usernamesEntries.size(), Text.equal, Text.hash);
-    private var subscriptions = HashMap.fromIter<Text, Subscription>(subscriptionsEntries.vals(), subscriptionsEntries.size(), Text.equal, Text.hash);
-    private var userSessions = HashMap.fromIter<Principal, Int>(userSessionsEntries.vals(), userSessionsEntries.size(), Principal.equal, Principal.hash);
-    private var suspendedUsers = HashMap.fromIter<Principal, (Text, Int)>(suspendedUsersEntries.vals(), suspendedUsersEntries.size(), Principal.equal, Principal.hash);
+    private transient var users = HashMap.fromIter<Principal, User>(usersEntries.vals(), usersEntries.size(), Principal.equal, Principal.hash);
+    private transient var usernames = HashMap.fromIter<Text, Principal>(usernamesEntries.vals(), usernamesEntries.size(), Text.equal, Text.hash);
+    private transient var subscriptions = HashMap.fromIter<Text, Subscription>(subscriptionsEntries.vals(), subscriptionsEntries.size(), Text.equal, Text.hash);
+    private transient var userSessions = HashMap.fromIter<Principal, Int>(userSessionsEntries.vals(), userSessionsEntries.size(), Principal.equal, Principal.hash);
+    private transient var suspendedUsers = HashMap.fromIter<Principal, (Text, Int)>(suspendedUsersEntries.vals(), suspendedUsersEntries.size(), Principal.equal, Principal.hash);
 
     // Video Manager Instance
-    private var videoManager = VideoManager.VideoManager();
+    private transient var videoManager = VideoManager.VideoManager();
     
     // LiveStream Manager Instance
-    private var liveStreamManager = LiveStreamManager.LiveStreamManager();
+    private transient var liveStreamManager = LiveStreamManager.LiveStreamManager();
     
     // Token Manager Instance
-    private var tokenManager = TokenManager.TokenManager();
+    private transient var tokenManager = TokenManager.TokenManager();
     
     // Emote Manager Instance
-    private var emoteManager = EmoteManager.EmoteManager();
+    private transient var emoteManager = EmoteManager.EmoteManager();
     
     // Analytics Manager Instance
-    private var analyticsManager = AnalyticsManager.AnalyticsManager();
+    private transient var analyticsManager = AnalyticsManager.AnalyticsManager();
     
     // Notification Manager Instance
-    private var notificationManager = NotificationManager.NotificationManager();
+    private transient var notificationManager = NotificationManager.NotificationManager();
     
     // Content Moderation Manager Instance
-    private var contentModerationManager = ContentModerationManager.ContentModerationManager();
+    private transient var contentModerationManager = ContentModerationManager.ContentModerationManager();
 
     system func preupgrade() {
         usersEntries := Iter.toArray(users.entries());
@@ -699,6 +699,10 @@ actor UserManager {
         videoManager.getVideoFeed(userId, limit, offset)
     };
 
+    public query func getAllVideos() : async Result.Result<[VideoManager.Video], Text> {
+        videoManager.getAllVideos()
+    };
+
     public query func searchVideos(searchQuery: Text, category: ?VideoManager.VideoCategory, limit: Nat) : async [VideoManager.Video] {
         videoManager.searchVideos(searchQuery, category, limit)
     };
@@ -713,6 +717,77 @@ actor UserManager {
 
     public query func getUserPlaylists(userId: Principal) : async [VideoManager.Playlist] {
         videoManager.getUserPlaylists(userId)
+    };
+
+    // Chunked Upload Functions
+    public shared(msg) func initializeChunkedUpload(
+        fileName: Text,
+        totalSize: Nat,
+        contentType: Text,
+        expectedChecksum: ?Text
+    ) : async Result.Result<Text, Text> {
+        await videoManager.initializeChunkedUpload(msg.caller, fileName, totalSize, contentType, expectedChecksum)
+    };
+
+    public shared(msg) func uploadChunk(
+        sessionId: Text,
+        chunkInfo: VideoManager.ChunkInfo
+    ) : async Result.Result<{uploaded: Nat; total: Nat}, Text> {
+        await videoManager.uploadChunk(msg.caller, sessionId, chunkInfo)
+    };
+
+    public shared(msg) func finalizeChunkedUpload(
+        sessionId: Text,
+        title: Text,
+        description: Text,
+        thumbnail: ?Blob,
+        videoType: VideoManager.VideoType,
+        category: VideoManager.VideoCategory,
+        tags: [Text],
+        hashtags: [Text],
+        settings: {
+            isPrivate: Bool;
+            isUnlisted: Bool;
+            allowComments: Bool;
+            allowDuets: Bool;
+            allowRemix: Bool;
+            isMonetized: Bool;
+            ageRestricted: Bool;
+            scheduledAt: ?Int;
+        }
+    ) : async Result.Result<Text, Text> {
+        await videoManager.finalizeChunkedUpload(
+            msg.caller, 
+            sessionId, 
+            title, 
+            description, 
+            thumbnail, 
+            videoType, 
+            category, 
+            tags, 
+            hashtags, 
+            settings
+        )
+    };
+
+    public query func getChunkedUploadProgress(sessionId: Text) : async Result.Result<{uploaded: Nat; total: Nat; percentage: Float}, Text> {
+        videoManager.getChunkedUploadProgress(sessionId)
+    };
+
+    public shared(msg) func cancelChunkedUpload(sessionId: Text) : async Result.Result<(), Text> {
+        await videoManager.cancelChunkedUpload(msg.caller, sessionId)
+    };
+
+    public query func getVideoStreamChunk(
+        videoId: Text,
+        chunkIndex: Nat,
+        chunkSize: ?Nat
+    ) : async Result.Result<VideoManager.StreamChunk, Text> {
+        videoManager.getVideoStreamChunk(videoId, chunkIndex, chunkSize)
+    };
+
+    public query func getVideoStreamInfo(videoId: Text) : async Result.Result<{totalSize: Nat; totalChunks: Nat; chunkSize: Nat}, Text> {
+        videoManager.getVideoStreamInfo(videoId)
     };
 
     // LiveStream Functions

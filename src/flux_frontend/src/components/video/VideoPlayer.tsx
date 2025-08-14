@@ -30,29 +30,51 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const { toggleVideoLike } = useAppStore();
 
+  // Check if we have a valid video URL (including blob URLs)
+  const hasValidVideoUrl = video.videoUrl && 
+    (video.videoUrl.startsWith('http') || video.videoUrl.startsWith('blob:')) && 
+    !video.videoUrl.includes('#video-') &&
+    !video.videoUrl.endsWith('/') &&
+    video.videoUrl.length > 10;
+
+  // Console log the video URL for debugging
+  console.log('Video URL for video:', video.id, '- URL:', video.videoUrl, '- Valid:', hasValidVideoUrl);
+
   useEffect(() => {
-    if (isActive && videoRef.current) {
+    if (isActive && videoRef.current && hasValidVideoUrl) {
       videoRef.current.currentTime = 0;
       setIsPlaying(true);
     } else {
       setIsPlaying(false);
     }
-  }, [isActive]);
+  }, [isActive, hasValidVideoUrl]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const videoElement = videoRef.current;
+    if (!videoElement || !hasValidVideoUrl) return;
 
     if (isPlaying) {
-      video.play();
+      // Add a small delay to prevent rapid play/pause cycles
+      const playTimeout = setTimeout(() => {
+        if (videoElement && isPlaying) {
+          videoElement.play().catch(error => {
+            console.log('Video play failed:', error);
+            setIsPlaying(false);
+          });
+        }
+      }, 100);
+      
+      return () => clearTimeout(playTimeout);
     } else {
-      video.pause();
+      videoElement.pause();
     }
-  }, [isPlaying]);
+  }, [isPlaying, hasValidVideoUrl]);
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying);
@@ -92,13 +114,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     handleLike();
   };
 
+  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    const video = e.currentTarget;
+    console.log('Video error for:', video.src, 'Error:', video.error);
+    
+    setVideoError(true);
+    setIsPlaying(false);
+    
+    // Prevent repeated error attempts by removing the src
+    video.removeAttribute('src');
+    video.load(); // Reset the video element
+    
+    // Show controls to indicate there's an issue
+    setShowControls(true);
+  };
+
+  const handleVideoLoadStart = () => {
+    // Only log if it's a valid video URL
+    if (video.videoUrl && 
+        video.videoUrl.startsWith('http') && 
+        !video.videoUrl.includes('#video-') &&
+        !video.videoUrl.endsWith('/')) {
+      console.log('Loading video:', video.videoUrl);
+      setVideoError(false);
+    }
+  };
+
+  const handleVideoCanPlay = () => {
+    setVideoLoaded(true);
+    setVideoError(false);
+  };
+
+  const handleVideoLoadedData = () => {
+    setVideoLoaded(true);
+  };
+
   return (
     <div className={cn("relative w-full h-full bg-black overflow-hidden", className)}>
       {/* Video Element */}
       <video
         ref={videoRef}
         className="w-full h-full object-cover"
-        src={video.videoUrl}
+        src={hasValidVideoUrl ? video.videoUrl : undefined}
         poster={video.thumbnail}
         loop
         muted={isMuted}
@@ -106,11 +163,52 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onEnded={onVideoEnd}
         onClick={handleVideoClick}
         onDoubleClick={handleDoubleClick}
+        onError={handleVideoError}
+        onLoadStart={handleVideoLoadStart}
+        onCanPlay={handleVideoCanPlay}
+        onLoadedData={handleVideoLoadedData}
+        crossOrigin="anonymous"
+        preload={isActive ? "auto" : "none"}
+        controls={false}
       />
 
       {/* Gradient Overlays */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/20 pointer-events-none" />
+
+      {/* Video Placeholder Overlay for videos without actual video data */}
+      {!hasValidVideoUrl && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="text-center text-white p-4">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-2 mx-auto">
+              <Play className="w-8 h-8 text-white ml-1" />
+            </div>
+            <p className="text-sm opacity-80">Video Preview</p>
+          </div>
+        </div>
+      )}
+
+      {/* Video Loading Overlay */}
+      {hasValidVideoUrl && !videoLoaded && !videoError && isActive && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <div className="text-center text-white p-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+            <p className="text-sm opacity-80">Loading video...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Video Error Overlay */}
+      {videoError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="text-center text-white p-4">
+            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-2 mx-auto">
+              <Play className="w-8 h-8 text-white ml-1" />
+            </div>
+            <p className="text-sm opacity-80">Video unavailable</p>
+          </div>
+        </div>
+      )}
 
       {/* Play/Pause Control */}
       <AnimatePresence>

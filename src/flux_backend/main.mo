@@ -34,6 +34,18 @@ persistent actor UserManager {
         #Rejected;
     };
 
+    type UserError = {
+        #NotFound;
+        #AlreadyExists;
+        #Unauthorized;
+        #InvalidInput: Text;
+        #InsufficientFunds;
+        #AlreadyFollowing;
+        #AlreadySubscribed;
+        #CannotFollowSelf;
+        #Suspended;
+    };
+
     type Badge = {
         id: Text;
         name: Text;
@@ -215,9 +227,25 @@ persistent actor UserManager {
     public shared(msg) func createUser(username: Text, displayName: Text, email: ?Text, avatar: ?Text) : async Result.Result<User, Text> {
         let caller = msg.caller;
         
-        // Validate username
-        if (Text.size(username) < 3 or Text.size(username) > 20) {
-            return #err("Username must be between 3 and 20 characters");
+        // Enhanced validation
+        switch (validateUsername(username)) {
+            case (#err(msg)) { return #err(msg) };
+            case (#ok()) { };
+        };
+        
+        // Validate display name
+        if (Text.size(displayName) == 0 or Text.size(displayName) > 50) {
+            return #err("Display name must be between 1 and 50 characters");
+        };
+        
+        // Validate email if provided
+        switch (email) {
+            case (?emailAddr) {
+                if (not validateEmail(emailAddr)) {
+                    return #err("Invalid email format");
+                };
+            };
+            case null { };
         };
         
         // Check if username exists
@@ -315,6 +343,25 @@ persistent actor UserManager {
     public shared(msg) func updateProfile(displayName: ?Text, bio: ?Text, avatar: ?Text, banner: ?Text, socialLinks: ?SocialLinks) : async Result.Result<User, Text> {
         let caller = msg.caller;
         
+        // Validate inputs
+        switch (displayName) {
+            case (?name) {
+                if (Text.size(name) == 0 or Text.size(name) > 50) {
+                    return #err("Display name must be between 1 and 50 characters");
+                };
+            };
+            case null { };
+        };
+        
+        switch (bio) {
+            case (?bioText) {
+                if (Text.size(bioText) > 500) {
+                    return #err("Bio must be no more than 500 characters");
+                };
+            };
+            case null { };
+        };
+        
         switch (users.get(caller)) {
             case (?user) {
                 let updatedUser = {
@@ -340,11 +387,22 @@ persistent actor UserManager {
             return #err("Cannot follow yourself");
         };
         
+        // Check if target user exists
+        switch (users.get(targetUser)) {
+            case null { return #err("Target user not found") };
+            case (?_) { };
+        };
+        
+        // Check if already following
+        if (isUserFollowing(caller, targetUser)) {
+            return #err("Already following this user");
+        };
+        
         // Update follower's following list
         switch (users.get(caller)) {
             case (?user) {
                 let updatedFollowing = Array.append(user.following, [targetUser]);
-                let updatedUser = { user with following = updatedFollowing };
+                let updatedUser = { user with following = updatedFollowing; lastActive = Time.now() };
                 users.put(caller, updatedUser);
             };
             case null { return #err("User not found") };
@@ -357,7 +415,10 @@ persistent actor UserManager {
                 let updatedUser = { user with followers = updatedFollowers };
                 users.put(targetUser, updatedUser);
             };
-            case null { return #err("Target user not found") };
+            case null { 
+                // This should not happen since we checked above, but handle gracefully
+                return #err("Target user not found during update");
+            };
         };
         
         #ok()
@@ -366,11 +427,16 @@ persistent actor UserManager {
     public shared(msg) func unfollowUser(targetUser: Principal) : async Result.Result<(), Text> {
         let caller = msg.caller;
         
+        // Check if currently following
+        if (not isUserFollowing(caller, targetUser)) {
+            return #err("Not currently following this user");
+        };
+        
         // Update follower's following list
         switch (users.get(caller)) {
             case (?user) {
                 let updatedFollowing = Array.filter(user.following, func (id: Principal) : Bool { id != targetUser });
-                let updatedUser = { user with following = updatedFollowing };
+                let updatedUser = { user with following = updatedFollowing; lastActive = Time.now() };
                 users.put(caller, updatedUser);
             };
             case null { return #err("User not found") };
@@ -391,22 +457,45 @@ persistent actor UserManager {
 
     public shared(msg) func subscribe(streamer: Principal, tier: Nat, duration: Nat) : async Result.Result<Text, Text> {
         let caller = msg.caller;
+        
+        if (caller == streamer) {
+            return #err("Cannot subscribe to yourself");
+        };
+        
+        // Validate inputs
+        if (tier < 1 or tier > 3) {
+            return #err("Invalid subscription tier (must be 1-3)");
+        };
+        
+        if (duration < 1 or duration > 365) {
+            return #err("Invalid duration (must be 1-365 days)");
+        };
+        
+        // Check if streamer exists
+        switch (users.get(streamer)) {
+            case null { return #err("Streamer not found") };
+            case (?_) { };
+        };
+        
+        // Check if already subscribed
+        if (isUserSubscribed(caller, streamer)) {
+            return #err("Already subscribed to this streamer");
+        };
+        
         let subscriptionId = Principal.toText(caller) # "_" # Principal.toText(streamer) # "_" # Int.toText(Time.now());
         
         // Calculate cost based on tier and duration
         let cost = calculateSubscriptionCost(tier, duration);
         
-        // Check user balance
+        // Check user balance and deduct coins
         switch (users.get(caller)) {
             case (?user) {
                 if (user.coinBalance < cost) {
                     return #err("Insufficient coins");
                 };
                 
-                // Since we've verified user.coinBalance >= cost, this subtraction is safe
-                assert(user.coinBalance >= cost);
-                let newBalance = Nat.sub(user.coinBalance, cost);
-                let updatedUser = { user with coinBalance = newBalance };
+                let newBalance = user.coinBalance - cost; // Safe subtraction since we checked above
+                let updatedUser = { user with coinBalance = newBalance; lastActive = Time.now() };
                 users.put(caller, updatedUser);
             };
             case null { return #err("User not found") };
@@ -488,11 +577,53 @@ persistent actor UserManager {
     public shared(msg) func blockUser(targetUser: Principal) : async Result.Result<(), Text> {
         let caller = msg.caller;
         
+        if (caller == targetUser) {
+            return #err("Cannot block yourself");
+        };
+        
+        // Check if target user exists
+        switch (users.get(targetUser)) {
+            case null { return #err("Target user not found") };
+            case (?_) { };
+        };
+        
         switch (users.get(caller)) {
             case (?user) {
+                // Check if already blocked
+                if (Array.find(user.blockedUsers, func (id: Principal) : Bool { id == targetUser }) != null) {
+                    return #err("User already blocked");
+                };
+                
                 let updatedBlockedUsers = Array.append(user.blockedUsers, [targetUser]);
-                let updatedUser = { user with blockedUsers = updatedBlockedUsers };
+                
+                // Also remove from following/followers if they exist
+                let updatedFollowing = Array.filter(user.following, func (id: Principal) : Bool { id != targetUser });
+                let updatedFollowers = Array.filter(user.followers, func (id: Principal) : Bool { id != targetUser });
+                
+                let updatedUser = { 
+                    user with 
+                    blockedUsers = updatedBlockedUsers;
+                    following = updatedFollowing;
+                    followers = updatedFollowers;
+                    lastActive = Time.now();
+                };
                 users.put(caller, updatedUser);
+                
+                // Remove caller from target user's followers/following lists
+                switch (users.get(targetUser)) {
+                    case (?targetUserData) {
+                        let targetUpdatedFollowing = Array.filter(targetUserData.following, func (id: Principal) : Bool { id != caller });
+                        let targetUpdatedFollowers = Array.filter(targetUserData.followers, func (id: Principal) : Bool { id != caller });
+                        let targetUpdatedUser = { 
+                            targetUserData with 
+                            following = targetUpdatedFollowing;
+                            followers = targetUpdatedFollowers;
+                        };
+                        users.put(targetUser, targetUpdatedUser);
+                    };
+                    case null { };
+                };
+                
                 #ok()
             };
             case null { #err("User not found") };
@@ -558,59 +689,198 @@ persistent actor UserManager {
         Buffer.toArray(results)
     };
 
-    // Private helper functions
-    private func calculateSubscriptionCost(tier: Nat, duration: Nat) : Nat {
-        let baseCost = switch (tier) {
-            case 1 { 500 }; // $4.99 equivalent
-            case 2 { 1000 }; // $9.99 equivalent
-            case 3 { 2500 }; // $24.99 equivalent
-            case _ { 500 };
+    // Data Integrity Functions
+    public shared(msg) func validateDataIntegrity() : async Result.Result<{
+        usersCount: Nat;
+        usernamesCount: Nat;
+        orphanedUsernames: Nat;
+        duplicateFollowsFixed: Nat;
+        expiredSubscriptionsFixed: Nat;
+    }, Text> {
+        if (not isAdmin(msg.caller)) {
+            return #err("Unauthorized: Admin access required");
         };
-        baseCost * duration
-    };
-
-    // Admin functions
-    public shared(_msg) func suspendUser(userId: Principal, reason: Text, duration: Nat) : async Result.Result<(), Text> {
-        // TODO: Add admin authorization check
-        // For now, anyone can suspend (should be restricted to admins)
         
-        switch (users.get(userId)) {
-            case (?user) {
-                let suspensionEndDate = Time.now() + (duration * 24 * 60 * 60 * 1000000000); // duration in days
+        var orphanedUsernames = 0;
+        var duplicateFollowsFixed = 0;
+        var expiredSubscriptionsFixed = 0;
+        
+        // Check for orphaned usernames
+        let usernamesToRemove = Buffer.Buffer<Text>(0);
+        for ((username, userId) in usernames.entries()) {
+            switch (users.get(userId)) {
+                case null { 
+                    usernamesToRemove.add(username);
+                    orphanedUsernames += 1;
+                };
+                case (?user) {
+                    if (user.username != username) {
+                        usernamesToRemove.add(username);
+                        orphanedUsernames += 1;
+                    };
+                };
+            };
+        };
+        
+        // Remove orphaned usernames
+        for (username in usernamesToRemove.vals()) {
+            usernames.delete(username);
+        };
+        
+        // Fix duplicate follows and clean up user relationships
+        for ((userId, user) in users.entries()) {
+            // Remove duplicates from following list
+            let uniqueFollowing = Buffer.Buffer<Principal>(0);
+            let seenFollowing = HashMap.HashMap<Principal, Bool>(0, Principal.equal, Principal.hash);
+            
+            for (followId in user.following.vals()) {
+                switch (seenFollowing.get(followId)) {
+                    case null {
+                        seenFollowing.put(followId, true);
+                        uniqueFollowing.add(followId);
+                    };
+                    case (?_) { duplicateFollowsFixed += 1; };
+                };
+            };
+            
+            // Remove duplicates from followers list
+            let uniqueFollowers = Buffer.Buffer<Principal>(0);
+            let seenFollowers = HashMap.HashMap<Principal, Bool>(0, Principal.equal, Principal.hash);
+            
+            for (followerId in user.followers.vals()) {
+                switch (seenFollowers.get(followerId)) {
+                    case null {
+                        seenFollowers.put(followerId, true);
+                        uniqueFollowers.add(followerId);
+                    };
+                    case (?_) { duplicateFollowsFixed += 1; };
+                };
+            };
+            
+            // Update user if changes were made
+            let newFollowing = Buffer.toArray(uniqueFollowing);
+            let newFollowers = Buffer.toArray(uniqueFollowers);
+            
+            if (Array.size(newFollowing) != Array.size(user.following) or 
+                Array.size(newFollowers) != Array.size(user.followers)) {
                 let updatedUser = {
-                    user with
-                    isSuspended = true;
-                    suspensionReason = ?reason;
-                    suspensionEndDate = ?suspensionEndDate;
+                    user with 
+                    following = newFollowing;
+                    followers = newFollowers;
                 };
                 users.put(userId, updatedUser);
-                suspendedUsers.put(userId, (reason, suspensionEndDate));
+            };
+        };
+        
+        // Clean up expired subscriptions
+        let subscriptionsToUpdate = Buffer.Buffer<(Text, Subscription)>(0);
+        let now = Time.now();
+        
+        for ((subId, subscription) in subscriptions.entries()) {
+            if (subscription.isActive and subscription.endDate < now) {
+                let updatedSubscription = { subscription with isActive = false };
+                subscriptionsToUpdate.add((subId, updatedSubscription));
+                expiredSubscriptionsFixed += 1;
+            };
+        };
+        
+        // Update expired subscriptions
+        for ((subId, updatedSub) in subscriptionsToUpdate.vals()) {
+            subscriptions.put(subId, updatedSub);
+        };
+        
+        #ok({
+            usersCount = users.size();
+            usernamesCount = usernames.size();
+            orphanedUsernames = orphanedUsernames;
+            duplicateFollowsFixed = duplicateFollowsFixed;
+            expiredSubscriptionsFixed = expiredSubscriptionsFixed;
+        })
+    };
+
+    public shared(msg) func unblockUser(targetUser: Principal) : async Result.Result<(), Text> {
+        let caller = msg.caller;
+        
+        switch (users.get(caller)) {
+            case (?user) {
+                // Check if user is actually blocked
+                if (Array.find(user.blockedUsers, func (id: Principal) : Bool { id == targetUser }) == null) {
+                    return #err("User is not blocked");
+                };
+                
+                let updatedBlockedUsers = Array.filter(user.blockedUsers, func (id: Principal) : Bool { id != targetUser });
+                let updatedUser = { 
+                    user with 
+                    blockedUsers = updatedBlockedUsers;
+                    lastActive = Time.now();
+                };
+                users.put(caller, updatedUser);
                 #ok()
             };
             case null { #err("User not found") };
         }
     };
 
-    public shared(_msg) func verifyUser(userId: Principal) : async Result.Result<(), Text> {
-        // TODO: Add admin authorization check
-        // For now, anyone can verify (should be restricted to admins)
+    public shared(msg) func unsuspendUser(userId: Principal) : async Result.Result<(), Text> {
+        if (not isAdmin(msg.caller)) {
+            return #err("Unauthorized: Admin access required");
+        };
         
         switch (users.get(userId)) {
             case (?user) {
                 let updatedUser = {
                     user with
-                    verificationStatus = #Verified;
+                    isSuspended = false;
+                    suspensionReason = null;
+                    suspensionEndDate = null;
                 };
                 users.put(userId, updatedUser);
+                suspendedUsers.delete(userId);
                 #ok()
             };
             case null { #err("User not found") };
         }
     };
 
-    // Private helper functions
-    private func _generateStreamKey(caller: Principal) : Text {
-        "sk_" # Principal.toText(caller) # "_" # Int.toText(Time.now())
+    public query func getUserRelationship(targetUser: Principal) : async Result.Result<UserRelationship, Text> {
+        // Note: This would need the caller context, so it should be a shared function
+        // For now, returning an error as query functions don't have access to msg.caller
+        #err("Use getUserRelationshipWithAuth instead")
+    };
+
+    public shared(msg) func getUserRelationshipWithAuth(targetUser: Principal) : async Result.Result<UserRelationship, Text> {
+        let caller = msg.caller;
+        
+        if (caller == targetUser) {
+            return #err("Cannot get relationship with yourself");
+        };
+        
+        switch (users.get(caller)) {
+            case (?user) {
+                // Check if blocked
+                if (Array.find(user.blockedUsers, func (id: Principal) : Bool { id == targetUser }) != null) {
+                    return #ok(#Blocked);
+                };
+                
+                let isFollowing = Array.find(user.following, func (id: Principal) : Bool { id == targetUser }) != null;
+                let isFollower = Array.find(user.followers, func (id: Principal) : Bool { id == targetUser }) != null;
+                let isSubscribed = isUserSubscribed(caller, targetUser);
+                
+                if (isSubscribed) {
+                    return #ok(#Subscriber);
+                } else if (isFollowing and isFollower) {
+                    return #ok(#Mutual);
+                } else if (isFollowing) {
+                    return #ok(#Following);
+                } else if (isFollower) {
+                    return #ok(#Follower);
+                } else {
+                    // No specific relationship found, but we could add a #None variant
+                    return #err("No relationship found");
+                };
+            };
+            case null { #err("User not found") };
+        }
     };
 
     // Video functions 
@@ -1032,5 +1302,4 @@ persistent actor UserManager {
     } {
         await contentModerationManager.getModerationStatsPublic()
     };
-    // ...existing code...
 }

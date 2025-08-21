@@ -408,12 +408,23 @@ persistent actor UserManager {
             case null { return #err("User not found") };
         };
         
-        // Update target user's followers list
+        // Update target user's followers list and stats
         switch (users.get(targetUser)) {
             case (?user) {
                 let updatedFollowers = Array.append(user.followers, [caller]);
-                let updatedUser = { user with followers = updatedFollowers };
+                let updatedStats = {
+                    user.stats with
+                    followersGained30d = user.stats.followersGained30d + 1;
+                };
+                let updatedUser = { 
+                    user with 
+                    followers = updatedFollowers;
+                    stats = updatedStats;
+                };
                 users.put(targetUser, updatedUser);
+                
+                // Record analytics
+                ignore analyticsManager.recordUserAction(targetUser, "follower_gained", null, ?("New follower: " # Principal.toText(caller)));
             };
             case null { 
                 // This should not happen since we checked above, but handle gracefully
@@ -517,12 +528,24 @@ persistent actor UserManager {
         
         subscriptions.put(subscriptionId, subscription);
         
-        // Update streamer's subscriber list
+        // Update streamer's subscriber list and revenue stats
         switch (users.get(streamer)) {
             case (?user) {
                 let updatedSubscribers = Array.append(user.subscribers, [caller]);
-                let updatedUser = { user with subscribers = updatedSubscribers };
+                let updatedStats = {
+                    user.stats with
+                    totalRevenue = user.stats.totalRevenue + cost;
+                };
+                let updatedUser = { 
+                    user with 
+                    subscribers = updatedSubscribers;
+                    stats = updatedStats;
+                };
                 users.put(streamer, updatedUser);
+                
+                // Record analytics
+                ignore analyticsManager.recordUserAction(streamer, "subscription_received", ?subscriptionId, ?("Tier " # Nat.toText(tier) # " subscription"));
+                ignore analyticsManager.recordUserAction(caller, "subscription_purchased", ?subscriptionId, ?("Subscribed to " # Principal.toText(streamer)));
             };
             case null { return #err("Streamer not found") };
         };
@@ -659,34 +682,132 @@ persistent actor UserManager {
 
     public query func getUserSubscriptions(userId: Principal) : async [Subscription] {
         let userSubs = Buffer.Buffer<Subscription>(0);
+        let now = Time.now();
+        
         for ((_, subscription) in subscriptions.entries()) {
-            if (subscription.subscriber == userId and subscription.isActive) {
-                userSubs.add(subscription);
+            if (subscription.subscriber == userId) {
+                // Only include active subscriptions that haven't expired
+                if (subscription.isActive and subscription.endDate > now) {
+                    userSubs.add(subscription);
+                };
             };
         };
         Buffer.toArray(userSubs)
     };
 
-    public query func searchUsers(searchQuery: Text, limit: Nat) : async [User] {
-        let results = Buffer.Buffer<User>(0);
-        let lowerQuery = searchQuery; // Note: Text.toLowercase is not available in older versions
-        var count = 0;
+    public query func getStreamerSubscriptions(streamerId: Principal, includeExpired: Bool) : async {
+        active: [Subscription];
+        expired: [Subscription];
+        totalRevenue: Nat;
+    } {
+        let activeSubs = Buffer.Buffer<Subscription>(0);
+        let expiredSubs = Buffer.Buffer<Subscription>(0);
+        let now = Time.now();
+        var totalRevenue = 0;
         
+        for ((_, subscription) in subscriptions.entries()) {
+            if (subscription.streamer == streamerId) {
+                totalRevenue += subscription.totalPaid;
+                
+                if (subscription.isActive and subscription.endDate > now) {
+                    activeSubs.add(subscription);
+                } else if (includeExpired) {
+                    expiredSubs.add(subscription);
+                };
+            };
+        };
+        
+        {
+            active = Buffer.toArray(activeSubs);
+            expired = Buffer.toArray(expiredSubs);
+            totalRevenue = totalRevenue;
+        }
+    };
+
+    public query func getSubscriptionStats(userId: Principal) : async {
+        totalSubscriptions: Nat;
+        activeSubscriptions: Nat;
+        totalSpent: Nat;
+        currentMonthlySpend: Nat;
+    } {
+        var totalSubs = 0;
+        var activeSubs = 0;
+        var totalSpent = 0;
+        var monthlySpend = 0;
+        let now = Time.now();
+        let monthAgo = now - (30 * 24 * 60 * 60 * 1000000000); // 30 days ago
+        
+        for ((_, subscription) in subscriptions.entries()) {
+            if (subscription.subscriber == userId) {
+                totalSubs += 1;
+                totalSpent += subscription.totalPaid;
+                
+                if (subscription.isActive and subscription.endDate > now) {
+                    activeSubs += 1;
+                    
+                    // Calculate monthly spend for recent subscriptions
+                    if (subscription.startDate > monthAgo) {
+                        monthlySpend += subscription.totalPaid;
+                    };
+                };
+            };
+        };
+        
+        {
+            totalSubscriptions = totalSubs;
+            activeSubscriptions = activeSubs;
+            totalSpent = totalSpent;
+            currentMonthlySpend = monthlySpend;
+        }
+    };
+
+    public query func searchUsers(searchQuery: Text, limit: Nat, offset: Nat) : async {
+        users: [User];
+        totalMatches: Nat;
+        hasMore: Bool;
+    } {
+        let results = Buffer.Buffer<User>(0);
+        let lowerQuery = searchQuery;
+        var totalMatches = 0;
+        var skipped = 0;
+        var collected = 0;
+        
+        // First pass: count total matches and collect results with pagination
         label searchLoop for ((_, user) in users.entries()) {
-            if (count >= limit) { break searchLoop };
-            
             let lowerUsername = user.username;
             let lowerDisplayName = user.displayName;
             
             // Simple substring matching (case-sensitive for now)
             if (Text.contains(lowerUsername, #text lowerQuery) or 
-                Text.contains(lowerDisplayName, #text lowerQuery)) {
-                results.add(user);
-                count += 1;
+                Text.contains(lowerDisplayName, #text lowerQuery) or
+                Text.contains(user.bio, #text lowerQuery)) {
+                
+                totalMatches += 1;
+                
+                // Skip results until we reach the offset
+                if (skipped < offset) {
+                    skipped += 1;
+                    continue searchLoop;
+                };
+                
+                // Collect results up to the limit
+                if (collected < limit) {
+                    results.add(user);
+                    collected += 1;
+                };
+                
+                // Stop collecting once we have enough results
+                if (collected >= limit) {
+                    continue searchLoop; // Keep counting total matches
+                };
             };
         };
         
-        Buffer.toArray(results)
+        {
+            users = Buffer.toArray(results);
+            totalMatches = totalMatches;
+            hasMore = totalMatches > (offset + limit);
+        }
     };
 
     // Data Integrity Functions
@@ -929,7 +1050,34 @@ persistent actor UserManager {
     };
 
     public shared(msg) func likeVideo(videoId: Text) : async Result.Result<(), Text> {
-        await videoManager.likeVideo(msg.caller, videoId)
+        let result = await videoManager.likeVideo(msg.caller, videoId);
+        
+        // Update user stats on successful like
+        switch (result) {
+            case (#ok()) {
+                switch (users.get(msg.caller)) {
+                    case (?user) {
+                        let updatedStats = {
+                            user.stats with
+                            totalLikes = user.stats.totalLikes + 1;
+                        };
+                        let updatedUser = { 
+                            user with 
+                            stats = updatedStats;
+                            lastActive = Time.now();
+                        };
+                        users.put(msg.caller, updatedUser);
+                        
+                        // Record analytics
+                        ignore analyticsManager.recordUserAction(msg.caller, "like", ?videoId, null);
+                    };
+                    case null { };
+                };
+            };
+            case (#err(_)) { };
+        };
+        
+        result
     };
 
     public shared(msg) func addComment(videoId: Text, content: Text, parentCommentId: ?Text) : async Result.Result<Text, Text> {
@@ -941,7 +1089,35 @@ persistent actor UserManager {
     };
 
     public shared(msg) func recordView(videoId: Text, watchTime: Nat) : async Result.Result<(), Text> {
-        await videoManager.recordView(msg.caller, videoId, watchTime)
+        let result = await videoManager.recordView(msg.caller, videoId, watchTime);
+        
+        // Update user stats on successful view recording
+        switch (result) {
+            case (#ok()) {
+                switch (users.get(msg.caller)) {
+                    case (?user) {
+                        let updatedStats = {
+                            user.stats with
+                            totalViews = user.stats.totalViews + 1;
+                            viewsGained30d = user.stats.viewsGained30d + 1;
+                        };
+                        let updatedUser = { 
+                            user with 
+                            stats = updatedStats;
+                            lastActive = Time.now();
+                        };
+                        users.put(msg.caller, updatedUser);
+                        
+                        // Record analytics with proper watch time conversion
+                        ignore analyticsManager.recordView(msg.caller, msg.caller, videoId, Float.fromInt(watchTime));
+                    };
+                    case null { };
+                };
+            };
+            case (#err(_)) { };
+        };
+        
+        result
     };
 
     public shared(msg) func createPlaylist(title: Text, description: Text, isPublic: Bool) : async Result.Result<Text, Text> {
@@ -1301,5 +1477,179 @@ persistent actor UserManager {
         averageConfidence: Float;
     } {
         await contentModerationManager.getModerationStatsPublic()
+    };
+    
+    // Performance Analytics Functions
+    public query func getUserActivitySummary(userId: Principal) : async Result.Result<{
+        profile: {
+            username: Text;
+            displayName: Text;
+            tier: UserTier;
+            verificationStatus: VerificationStatus;
+            createdAt: Int;
+            lastActive: Int;
+        };
+        stats: UserStats;
+        relationships: {
+            followers: Nat;
+            following: Nat;
+            subscribers: Nat;
+        };
+        activity: {
+            isOnline: Bool;
+            daysSinceLastActive: Nat;
+            engagementLevel: Text; // High, Medium, Low
+        };
+    }, Text> {
+        switch (users.get(userId)) {
+            case (?user) {
+                let now = Time.now();
+                let daysSinceActive = (now - user.lastActive) / (24 * 60 * 60 * 1000_000_000);
+                let isOnline = daysSinceActive < 1; // Active within last day
+                
+                let engagementLevel = if (user.stats.totalViews > 1000 and user.stats.totalLikes > 100) {
+                    "High"
+                } else if (user.stats.totalViews > 100 and user.stats.totalLikes > 10) {
+                    "Medium"
+                } else {
+                    "Low"
+                };
+                
+                #ok({
+                    profile = {
+                        username = user.username;
+                        displayName = user.displayName;
+                        tier = user.tier;
+                        verificationStatus = user.verificationStatus;
+                        createdAt = user.createdAt;
+                        lastActive = user.lastActive;
+                    };
+                    stats = user.stats;
+                    relationships = {
+                        followers = Array.size(user.followers);
+                        following = Array.size(user.following);
+                        subscribers = Array.size(user.subscribers);
+                    };
+                    activity = {
+                        isOnline = isOnline;
+                        daysSinceLastActive = Int.abs(daysSinceActive);
+                        engagementLevel = engagementLevel;
+                    };
+                })
+            };
+            case null { #err("User not found") };
+        }
+    };
+
+    public query func getTopUsers(metric: Text, limit: Nat) : async [{
+        userId: Principal;
+        username: Text;
+        displayName: Text;
+        value: Nat;
+        tier: UserTier;
+    }] {
+        let userArray = Iter.toArray(users.entries());
+        let sortedUsers = Array.sort<(Principal, User)>(userArray, func(a, b) {
+            let valueA = switch (metric) {
+                case ("followers") { Array.size(a.1.followers) };
+                case ("views") { a.1.stats.totalViews };
+                case ("likes") { a.1.stats.totalLikes };
+                case ("streams") { a.1.stats.totalStreams };
+                case ("revenue") { a.1.stats.totalRevenue };
+                case (_) { 0 };
+            };
+            let valueB = switch (metric) {
+                case ("followers") { Array.size(b.1.followers) };
+                case ("views") { b.1.stats.totalViews };
+                case ("likes") { b.1.stats.totalLikes };
+                case ("streams") { b.1.stats.totalStreams };
+                case ("revenue") { b.1.stats.totalRevenue };
+                case (_) { 0 };
+            };
+            
+            if (valueA > valueB) { #less } 
+            else if (valueA < valueB) { #greater } 
+            else { #equal }
+        });
+        
+        let limitedUsers = if (Array.size(sortedUsers) > limit) {
+            Array.subArray<(Principal, User)>(sortedUsers, 0, limit)
+        } else {
+            sortedUsers
+        };
+        
+        Array.map<(Principal, User), {userId: Principal; username: Text; displayName: Text; value: Nat; tier: UserTier}>(
+            limitedUsers,
+            func((userId, user)) {
+                let value = switch (metric) {
+                    case ("followers") { Array.size(user.followers) };
+                    case ("views") { user.stats.totalViews };
+                    case ("likes") { user.stats.totalLikes };
+                    case ("streams") { user.stats.totalStreams };
+                    case ("revenue") { user.stats.totalRevenue };
+                    case (_) { 0 };
+                };
+                
+                {
+                    userId = userId;
+                    username = user.username;
+                    displayName = user.displayName;
+                    value = value;
+                    tier = user.tier;
+                }
+            }
+        )
+    };
+
+    public query func getPlatformStats() : async {
+        totalUsers: Nat;
+        activeUsers: Nat;
+        totalSubscriptions: Nat;
+        totalRevenue: Nat;
+        verifiedUsers: Nat;
+        partneredUsers: Nat;
+    } {
+        var activeUsers = 0;
+        var totalSubscriptionsCount = 0;
+        var totalPlatformRevenue = 0;
+        var verifiedUsers = 0;
+        var partneredUsers = 0;
+        
+        let now = Time.now();
+        let dayAgo = now - (24 * 60 * 60 * 1000_000_000);
+        
+        // Count user statistics
+        for ((_, user) in users.entries()) {
+            if (user.lastActive > dayAgo) {
+                activeUsers += 1;
+            };
+            
+            if (user.verificationStatus == #Verified) {
+                verifiedUsers += 1;
+            };
+            
+            switch (user.partnershipInfo) {
+                case (?_) { partneredUsers += 1 };
+                case null { };
+            };
+            
+            totalPlatformRevenue += user.stats.totalRevenue;
+        };
+        
+        // Count active subscriptions
+        for ((_, subscription) in subscriptions.entries()) {
+            if (subscription.isActive and subscription.endDate > now) {
+                totalSubscriptionsCount += 1;
+            };
+        };
+        
+        {
+            totalUsers = users.size();
+            activeUsers = activeUsers;
+            totalSubscriptions = totalSubscriptionsCount;
+            totalRevenue = totalPlatformRevenue;
+            verifiedUsers = verifiedUsers;
+            partneredUsers = partneredUsers;
+        }
     };
 }

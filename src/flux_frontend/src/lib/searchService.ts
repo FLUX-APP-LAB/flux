@@ -40,6 +40,63 @@ export interface SearchResult {
     count: number;
     growth: string;
   }>;
+  totalMatches?: number;
+  hasMore?: boolean;
+}
+
+export interface UserSearchResult {
+  users: FrontendUser[];
+  totalMatches: number;
+  hasMore: boolean;
+}
+
+export interface UserActivitySummary {
+  profile: {
+    username: string;
+    displayName: string;
+    tier: string;
+    verificationStatus: string;
+    createdAt: number;
+    lastActive: number;
+  };
+  stats: {
+    totalViews: number;
+    totalLikes: number;
+    totalStreams: number;
+    totalStreamTime: number;
+    averageViewers: number;
+    peakViewers: number;
+    totalRevenue: number;
+    followersGained30d: number;
+    viewsGained30d: number;
+  };
+  relationships: {
+    followers: number;
+    following: number;
+    subscribers: number;
+  };
+  activity: {
+    isOnline: boolean;
+    daysSinceLastActive: number;
+    engagementLevel: string;
+  };
+}
+
+export interface TopUser {
+  userId: string;
+  username: string;
+  displayName: string;
+  value: number;
+  tier: string;
+}
+
+export interface PlatformStats {
+  totalUsers: number;
+  activeUsers: number;
+  totalSubscriptions: number;
+  totalRevenue: number;
+  verifiedUsers: number;
+  partneredUsers: number;
 }
 
 export class SearchService {
@@ -73,7 +130,7 @@ export class SearchService {
     try {
       const [videoResults, userResults] = await Promise.all([
         this.searchVideos(query),
-        this.searchUsers(query)
+        this.searchUsersSimple(query) // Use simple version for searchAll
       ]);
 
       // Extract hashtags from video results
@@ -94,20 +151,45 @@ export class SearchService {
     }
   }
 
-  async searchUsers(query: string, limit: number = 20): Promise<FrontendUser[]> {
+  async searchUsers(query: string, limit: number = 20, offset: number = 0): Promise<UserSearchResult> {
     try {
-      const result = await this.actor.searchUsers(query, limit);
+      const result = await this.actor.searchUsers(query, limit, offset);
       
-      if (Array.isArray(result)) {
-        return result.map((user: BackendUser) => this.transformUser(user));
+      if (result && typeof result === 'object' && 'users' in result) {
+        // New API format with pagination
+        return {
+          users: result.users.map((user: BackendUser) => this.transformUser(user)),
+          totalMatches: result.totalMatches || 0,
+          hasMore: result.hasMore || false
+        };
+      } else if (Array.isArray(result)) {
+        // Fallback for old API format
+        return {
+          users: result.map((user: BackendUser) => this.transformUser(user)),
+          totalMatches: result.length,
+          hasMore: false
+        };
       } else {
         console.error('Unexpected result format for searchUsers:', result);
-        return [];
+        return {
+          users: [],
+          totalMatches: 0,
+          hasMore: false
+        };
       }
     } catch (error) {
       console.error('Error searching users:', error);
-      return [];
+      return {
+        users: [],
+        totalMatches: 0,
+        hasMore: false
+      };
     }
+  }
+
+  async searchUsersSimple(query: string, limit: number = 20): Promise<FrontendUser[]> {
+    const result = await this.searchUsers(query, limit, 0);
+    return result.users;
   }
 
   async searchVideos(query: string, limit: number = 50): Promise<any[]> {
@@ -132,19 +214,60 @@ export class SearchService {
     try {
       // For now, use search with empty query to get users
       // In a real app, you'd want a dedicated "suggested users" endpoint
-      const result = await this.actor.searchUsers('', limit);
+      const result = await this.searchUsersSimple('', limit);
       
-      if (Array.isArray(result)) {
-        return result
-          .map((user: BackendUser) => this.transformUser(user))
-          .filter(user => user.id !== this.currentUserId) // Don't suggest current user
-          .sort((a, b) => b.followersCount - a.followersCount); // Sort by followers
-      } else {
-        return [];
-      }
+      return result
+        .filter(user => user.id !== this.currentUserId) // Don't suggest current user
+        .sort((a, b) => b.followersCount - a.followersCount); // Sort by followers
     } catch (error) {
       console.error('Error getting suggested users:', error);
       return [];
+    }
+  }
+
+  async getUserActivitySummary(userId: string): Promise<UserActivitySummary | null> {
+    try {
+      const result = await this.actor.getUserActivitySummary(userId);
+      
+      if ('ok' in result) {
+        return result.ok;
+      } else {
+        console.error('Error getting user activity summary:', result.err);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error getting user activity summary:', error);
+      return null;
+    }
+  }
+
+  async getTopUsers(metric: string = 'followers', limit: number = 10): Promise<TopUser[]> {
+    try {
+      const result = await this.actor.getTopUsers(metric, limit);
+      return result || [];
+    } catch (error) {
+      console.error('Error getting top users:', error);
+      return [];
+    }
+  }
+
+  async getPlatformStats(): Promise<PlatformStats | null> {
+    try {
+      const result = await this.actor.getPlatformStats();
+      return result || null;
+    } catch (error) {
+      console.error('Error getting platform stats:', error);
+      return null;
+    }
+  }
+
+  async getSubscriptionStats(userId: string): Promise<any> {
+    try {
+      const result = await this.actor.getSubscriptionStats(userId);
+      return result || null;
+    } catch (error) {
+      console.error('Error getting subscription stats:', error);
+      return null;
     }
   }
 

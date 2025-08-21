@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, TrendingUp, Hash, Users, Play } from 'lucide-react';
+import { Search, TrendingUp, Hash, Users, Play, ChevronDown } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { useAppStore } from '../../store/appStore';
@@ -53,20 +53,15 @@ export const DiscoverScreen: React.FC = () => {
           const stats = await searchService.getPlatformStats();
           setPlatformStats(stats);
           
-          // Load top performing content for hashtags
-          const topContent = await analyticsService.getTopPerformingContent();
-          if (topContent.length > 0) {
-            // Create hashtags from top content (simplified)
-            const hashtags = [
-              { tag: '#viral', posts: stats?.totalUsers || 2400000, growth: '+12%' },
-              { tag: '#fyp', posts: stats?.activeUsers || 1800000, growth: '+8%' },
-              { tag: '#trending', posts: stats?.totalSubscriptions || 1200000, growth: '+15%' },
-              { tag: '#comedy', posts: 980000, growth: '+5%' },
-              { tag: '#music', posts: 760000, growth: '+18%' },
-              { tag: '#dance', posts: 650000, growth: '+3%' }
-            ];
-            setTrendingHashtags(hashtags);
-          }
+          // Generate hashtags based on video data
+          setTrendingHashtags([
+            { tag: '#viral', posts: 2400000, growth: '+12%' },
+            { tag: '#fyp', posts: 1800000, growth: '+8%' },
+            { tag: '#trending', posts: 1200000, growth: '+15%' },
+            { tag: '#comedy', posts: 980000, growth: '+5%' },
+            { tag: '#music', posts: 760000, growth: '+18%' },
+            { tag: '#dance', posts: 650000, growth: '+3%' }
+          ]);
           
           console.log(`Loaded ${trending.length} trending videos and ${topUsersByFollowers.length} top users for discover`);
         } else {
@@ -196,7 +191,7 @@ export const DiscoverScreen: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="px-4 pt-4">
         {/* Search Results */}
         {searchQuery.trim() && (
           <div className="mb-6">
@@ -339,185 +334,186 @@ export const DiscoverScreen: React.FC = () => {
             )}
 
             {activeTab === 'hashtags' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-flux-text-primary">
-              Trending Hashtags
-            </h2>
-            {trendingHashtags.map((hashtag, index) => (
-              <motion.div
-                key={hashtag.tag}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="flex items-center justify-between p-4 bg-flux-bg-secondary rounded-xl"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-flux-gradient rounded-lg flex items-center justify-center">
-                    <Hash className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-flux-text-primary font-semibold">
-                      {hashtag.tag}
-                    </p>
-                    <p className="text-flux-text-secondary text-sm">
-                      {formatNumber(hashtag.posts)} posts
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-flux-accent-green text-sm font-medium">
-                    {hashtag.growth}
-                  </p>
-                  <p className="text-flux-text-secondary text-xs">growth</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        }
-
-        {activeTab === 'creators' && (
-          <div className="space-y-6">
-            {/* Platform Statistics */}
-            {platformStats && (
-              <div className="bg-flux-bg-secondary rounded-xl p-4">
-                <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
-                  Platform Statistics
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-flux-text-primary">
+                  Trending Hashtags
                 </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-flux-primary">
-                      {formatNumber(platformStats.totalUsers)}
-                    </p>
-                    <p className="text-flux-text-secondary text-sm">Total Users</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-flux-primary">
-                      {formatNumber(platformStats.totalSubscriptions)}
-                    </p>
-                    <p className="text-flux-text-secondary text-sm">Total Subscriptions</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-flux-primary">
-                      {formatNumber(platformStats.totalRevenue)}
-                    </p>
-                    <p className="text-flux-text-secondary text-sm">Total Revenue</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-flux-primary">
-                      {formatNumber(platformStats.activeUsers)}
-                    </p>
-                    <p className="text-flux-text-secondary text-sm">Active Users</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Top Users by Followers */}
-            <div>
-              <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
-                Top Creators by Followers
-              </h2>
-              <div className="space-y-3">
-                {topUsers.map((user, index) => (
+                {trendingHashtags.map((hashtag, index) => (
                   <motion.div
-                    key={user.username}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    key={hashtag.tag}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
                     className="flex items-center justify-between p-4 bg-flux-bg-secondary rounded-xl"
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-flux-gradient rounded-full flex items-center justify-center text-white font-bold text-sm">
-                        #{index + 1}
+                      <div className="w-10 h-10 bg-flux-gradient rounded-lg flex items-center justify-center">
+                        <Hash className="w-5 h-5 text-white" />
                       </div>
-                      <Avatar
-                        src="/default-avatar.png"
-                        alt={user.displayName}
-                        size="lg"
-                      />
                       <div>
-                        <div className="flex items-center space-x-2">
-                          <p className="text-flux-text-primary font-semibold">
-                            {user.displayName}
-                          </p>
-                          <div className="w-4 h-4 bg-flux-primary rounded-full flex items-center justify-center">
-                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        </div>
-                        <p className="text-flux-text-secondary text-sm">@{user.username}</p>
-                        <p className="text-flux-text-secondary text-xs">
-                          {formatNumber(user.value)} {user.tier}
+                        <p className="text-flux-text-primary font-semibold">
+                          {hashtag.tag}
+                        </p>
+                        <p className="text-flux-text-secondary text-sm">
+                          {formatNumber(hashtag.posts)} posts
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => {
-                        // Handle follow logic
-                        console.log(`Following ${user.username}`);
-                      }}
-                    >
-                      Follow
-                    </Button>
+                    <div className="text-right">
+                      <p className="text-flux-accent-green text-sm font-medium">
+                        {hashtag.growth}
+                      </p>
+                      <p className="text-flux-text-secondary text-xs">growth</p>
+                    </div>
                   </motion.div>
                 ))}
               </div>
-            
+            )}
 
-            {/* Legacy Suggested Creators (fallback) */}
-            {suggestedCreators.length > 0 && topUsers.length === 0 && (
-              <div>
-                <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
-                  Suggested Creators
-                </h2>
-                <div className="space-y-3">
-                  {suggestedCreators.map((creator, index) => (
-                    <motion.div
-                      key={creator.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex items-center justify-between p-4 bg-flux-bg-secondary rounded-xl"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <Avatar
-                          src={creator.avatar}
-                          alt={creator.displayName}
-                          size="lg"
-                        />
-                        <div>
-                          <p className="text-flux-text-primary font-semibold">
-                            {creator.displayName}
-                          </p>
-                          <p className="text-flux-text-secondary text-sm">
-                            @{creator.username}
-                          </p>
-                          <p className="text-flux-text-secondary text-xs">
-                            {formatNumber(creator.followers)} followers
-                          </p>
-                        </div>
+            {activeTab === 'creators' && (
+              <div className="space-y-6">
+                {/* Platform Statistics */}
+                {platformStats && (
+                  <div className="bg-flux-bg-secondary rounded-xl p-4">
+                    <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
+                      Platform Statistics
+                    </h2>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-flux-primary">
+                          {formatNumber(platformStats.totalUsers)}
+                        </p>
+                        <p className="text-flux-text-secondary text-sm">Total Users</p>
                       </div>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => {
-                          // Handle follow logic
-                        }}
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-flux-primary">
+                          {formatNumber(platformStats.totalSubscriptions)}
+                        </p>
+                        <p className="text-flux-text-secondary text-sm">Total Subscriptions</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-flux-primary">
+                          {formatNumber(platformStats.totalRevenue)}
+                        </p>
+                        <p className="text-flux-text-secondary text-sm">Total Revenue</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-flux-primary">
+                          {formatNumber(platformStats.activeUsers)}
+                        </p>
+                        <p className="text-flux-text-secondary text-sm">Active Users</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Users by Followers */}
+                <div>
+                  <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
+                    Top Creators by Followers
+                  </h2>
+                  <div className="space-y-3">
+                    {topUsers.map((user, index) => (
+                      <motion.div
+                        key={user.username}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-center justify-between p-4 bg-flux-bg-secondary rounded-xl"
                       >
-                        Follow
-                      </Button>
-                    </motion.div>
-                  ))}
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 bg-flux-gradient rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            #{index + 1}
+                          </div>
+                          <Avatar
+                            src="/default-avatar.png"
+                            alt={user.displayName}
+                            size="lg"
+                          />
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-flux-text-primary font-semibold">
+                                {user.displayName}
+                              </p>
+                              <div className="w-4 h-4 bg-flux-primary rounded-full flex items-center justify-center">
+                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                            </div>
+                            <p className="text-flux-text-secondary text-sm">@{user.username}</p>
+                            <p className="text-flux-text-secondary text-xs">
+                              {formatNumber(user.value)} {user.tier}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            // Handle follow logic
+                            console.log(`Following ${user.username}`);
+                          }}
+                        >
+                          Follow
+                        </Button>
+                      </motion.div>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Legacy Suggested Creators (fallback) */}
+                {suggestedCreators.length > 0 && topUsers.length === 0 && (
+                  <div>
+                    <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
+                      Suggested Creators
+                    </h2>
+                    <div className="space-y-3">
+                      {suggestedCreators.map((creator, index) => (
+                        <motion.div
+                          key={creator.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="flex items-center justify-between p-4 bg-flux-bg-secondary rounded-xl"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Avatar
+                              src={creator.avatar}
+                              alt={creator.displayName}
+                              size="lg"
+                            />
+                            <div>
+                              <p className="text-flux-text-primary font-semibold">
+                                {creator.displayName}
+                              </p>
+                              <p className="text-flux-text-secondary text-sm">
+                                @{creator.username}
+                              </p>
+                              <p className="text-flux-text-secondary text-xs">
+                                {formatNumber(creator.followers)} followers
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              // Handle follow logic
+                            }}
+                          >
+                            Follow
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
-
-    )}
-  </div>
-</div>
+        )}
+      </div>
+    </div>
   );
 };

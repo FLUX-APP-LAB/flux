@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Radio, Users, Settings, Eye, EyeOff, Hash, Video, Monitor } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Camera, Mic, Settings, X, Eye, EyeOff, Upload, Gamepad2, Video } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
-import { WebRTCStream } from '../stream/WebRTCStream';
+import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store/appStore';
 import toast from 'react-hot-toast';
+import { getSafeThumbnail } from '../../lib/imageUtils';
+import { WebRTCStream } from '../stream/WebRTCStream';
 
 interface LiveStreamSetupProps {
   onClose: () => void;
+  canisterId?: string;
+  idlFactory?: any;
 }
 
-export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({ onClose }) => {
+export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({ 
+  onClose, 
+  canisterId = 'demo-canister-id', 
+  idlFactory = null 
+}) => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -41,7 +49,7 @@ export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({ onClose }) => 
     const newStream = {
       id: Date.now().toString(),
       title: title.trim(),
-      thumbnail: 'https://images.pexels.com/photos/1181472/pexels-photo-1181472.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
+      thumbnail: getSafeThumbnail(1, 400, 300),
       creator: currentUser!,
       viewers: 0,
       isLive: true,
@@ -96,13 +104,26 @@ export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({ onClose }) => 
 
         {showPreview ? (
           <div className="aspect-video bg-flux-bg-tertiary rounded-xl overflow-hidden">
-            <WebRTCStream
-              streamId="preview"
-              isStreamer={true}
-              onStreamStart={handleStreamStart}
-              onStreamEnd={handleStreamEnd}
-              className="w-full h-full"
-            />
+            {canisterId && idlFactory ? (
+              <WebRTCStream
+                streamId="preview"
+                isStreamer={true}
+                mode="streamer"
+                canisterId={canisterId}
+                idlFactory={idlFactory}
+                onStreamStart={handleStreamStart}
+                onStreamEnd={handleStreamEnd}
+                className="w-full h-full"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Camera className="w-12 h-12 text-flux-text-secondary mx-auto mb-4" />
+                  <p className="text-flux-text-secondary">Camera Preview</p>
+                  <p className="text-flux-text-secondary text-sm">Configure canister for full streaming</p>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="aspect-video bg-flux-bg-tertiary rounded-xl overflow-hidden flex items-center justify-center">

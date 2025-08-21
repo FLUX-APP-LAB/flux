@@ -16,6 +16,8 @@ import EmoteManager "emote";
 import AnalyticsManager "analytics";
 import NotificationManager "notification";
 import ContentModerationManager "contentmoderation";
+import WebRTCManager "webrtc";
+import ChunkedUploadManager "chunkedupload";
 
 persistent actor UserManager {
     // Types
@@ -206,6 +208,12 @@ persistent actor UserManager {
     
     // Content Moderation Manager Instance
     private transient var contentModerationManager = ContentModerationManager.ContentModerationManager();
+    
+    // WebRTC Signaling Service Instance
+    private transient var webRTCService = WebRTCManager.WebRTCSignalingService();
+    
+    // Chunked Upload Service Instance
+    private transient var chunkedUploadService = ChunkedUploadManager.ChunkedUploadService();
 
     system func preupgrade() {
         usersEntries := Iter.toArray(users.entries());
@@ -1651,5 +1659,180 @@ persistent actor UserManager {
             verifiedUsers = verifiedUsers;
             partneredUsers = partneredUsers;
         }
+    };
+
+    // WebRTC Streaming Functions
+    
+    // Create a new WebRTC stream
+    public shared(msg) func createWebRTCStream(streamData: {
+        streamId: Text;
+        title: Text;
+        category: Text;
+        maxViewers: Nat;
+    }) : async Result.Result<(), Text> {
+        let streamResult = await liveStreamManager.createStream(
+            msg.caller,
+            streamData.title,
+            "WebRTC Gaming Stream",
+            switch (streamData.category) {
+                case ("Gaming") { #Gaming };
+                case ("JustChatting") { #JustChatting };
+                case ("Music") { #Music };
+                case ("Art") { #Art };
+                case ("IRL") { #IRL };
+                case ("CryptoTrading") { #CryptoTrading };
+                case ("Education") { #Education };
+                case ("Sports") { #Sports };
+                case ("Technology") { #Technology };
+                case ("Cooking") { #Cooking };
+                case ("Fitness") { #Fitness };
+                case ("Creative") { #Creative };
+                case (_) { #Gaming };
+            },
+            [],
+            "General",
+            #P720
+        );
+        switch (streamResult) {
+            case (#ok(_)) {
+                // Initialize WebRTC connection for the stream
+                webRTCService.initializeStreamConnection(msg.caller, streamData.streamId, streamData.maxViewers)
+            };
+            case (#err(error)) {
+                #err("Failed to create livestream: " # error)
+            };
+        }
+    };
+    
+    // Viewer joins a stream
+    public shared(msg) func joinStream(streamId: Text, offer: Text) : async Result.Result<(), Text> {
+        webRTCService.joinStream(msg.caller, streamId, offer)
+    };
+    
+    // Streamer gets pending viewer connections
+    public shared(msg) func getPendingViewers(streamId: Text) : async Result.Result<[{viewerId: Text; offer: Text}], Text> {
+        webRTCService.getPendingViewers(msg.caller, streamId)
+    };
+    
+    // Streamer sends answer to viewer
+    public shared(msg) func sendAnswer(data: {
+        streamId: Text;
+        viewerId: Text;
+        answer: Text;
+    }) : async Result.Result<(), Text> {
+        webRTCService.sendAnswer(msg.caller, data.streamId, data.viewerId, data.answer)
+    };
+    
+    // Viewer gets answer from streamer
+    public shared(msg) func getAnswer(streamId: Text) : async Result.Result<?Text, Text> {
+        webRTCService.getAnswer(msg.caller, streamId)
+    };
+    
+    // ICE candidate exchange
+    public shared(msg) func sendIceCandidate(data: {
+        streamId: Text;
+        targetId: ?Text;
+        candidate: Text;
+    }) : async Result.Result<(), Text> {
+        webRTCService.sendIceCandidate(msg.caller, data.streamId, data.targetId, data.candidate)
+    };
+    
+    // Get ICE candidates
+    public shared(msg) func getIceCandidates(streamId: Text) : async Result.Result<[Text], Text> {
+        webRTCService.getIceCandidates(msg.caller, streamId)
+    };
+    
+    // Update viewer heartbeat
+    public shared(msg) func updateHeartbeat(streamId: Text) : async Result.Result<(), Text> {
+        webRTCService.updateHeartbeat(msg.caller, streamId)
+    };
+    
+    // Remove viewer from stream
+    public shared(msg) func leaveStream(streamId: Text) : async Result.Result<(), Text> {
+        webRTCService.removeViewer(msg.caller, streamId)
+    };
+    
+    // End WebRTC stream
+    public shared(msg) func endWebRTCStream(streamId: Text) : async Result.Result<(), Text> {
+        let webRTCResult = webRTCService.endStream(msg.caller, streamId);
+        // Also end the livestream
+        let _ = await liveStreamManager.endStream(msg.caller, streamId);
+        webRTCResult
+    };
+    
+    // Get stream statistics
+    public func getStreamStats(streamId: Text) : async Result.Result<WebRTCManager.WebRTCStats, Text> {
+        webRTCService.getStreamStats(streamId)
+    };
+    
+    // Get active streams
+    public query func getActiveStreams() : async [(Text, {streamerId: Text; viewerCount: Nat; isActive: Bool})] {
+        webRTCService.getActiveStreams()
+    };
+    
+    // Get viewer count for a stream
+    public query func getViewerCount(streamId: Text) : async Nat {
+        webRTCService.getViewerCount(streamId)
+    };
+    
+    // New Chunked Upload Service Functions
+    
+    // Initialize chunked upload for streaming service
+    public shared(msg) func initializeStreamUpload(
+        fileName: Text,
+        totalSize: Nat,
+        contentType: Text,
+        expectedChecksum: ?Text
+    ) : async Result.Result<Text, Text> {
+        chunkedUploadService.initializeUpload(msg.caller, fileName, totalSize, contentType, expectedChecksum)
+    };
+    
+    // Upload chunk for large files
+    public shared(msg) func uploadVideoChunk(
+        sessionId: Text,
+        chunkInfo: ChunkedUploadManager.ChunkInfo
+    ) : async Result.Result<{uploaded: Nat; total: Nat}, Text> {
+        chunkedUploadService.uploadChunk(msg.caller, sessionId, chunkInfo)
+    };
+    
+    // Finalize stream upload
+    public shared(msg) func finalizeStreamUpload(sessionId: Text) : async Result.Result<Text, Text> {
+        chunkedUploadService.finalizeUpload(msg.caller, sessionId)
+    };
+    
+    // Get stream upload progress
+    public func getStreamUploadProgress(sessionId: Text) : async Result.Result<{uploaded: Nat; total: Nat; percentage: Float}, Text> {
+        chunkedUploadService.getUploadProgress(sessionId)
+    };
+    
+    // Get missing chunks for resumable upload
+    public func getMissingVideoChunks(sessionId: Text) : async Result.Result<[Nat], Text> {
+        chunkedUploadService.getMissingChunks(sessionId)
+    };
+    
+    // Cancel stream upload
+    public shared(msg) func cancelStreamUpload(sessionId: Text) : async Result.Result<(), Text> {
+        chunkedUploadService.cancelUpload(msg.caller, sessionId)
+    };
+    
+    // Get stream chunk for playback
+    public func getStreamVideoChunk(
+        videoId: Text,
+        chunkIndex: Nat,
+        chunkSize: ?Nat
+    ) : async Result.Result<ChunkedUploadManager.StreamChunk, Text> {
+        chunkedUploadService.getStreamChunk(videoId, chunkIndex, chunkSize)
+    };
+    
+    // Get stream video info
+    public func getStreamVideoInfo(videoId: Text) : async Result.Result<{totalSize: Nat; totalChunks: Nat; chunkSize: Nat}, Text> {
+        chunkedUploadService.getVideoStreamInfo(videoId)
+    };
+    
+    // System maintenance functions
+    public shared(_msg) func cleanupExpiredSessions() : async Nat {
+        let webrtcCleaned = webRTCService.cleanupExpiredConnections();
+        let uploadCleaned = chunkedUploadService.cleanupExpiredSessions();
+        webrtcCleaned + uploadCleaned
     };
 }

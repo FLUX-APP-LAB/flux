@@ -86,12 +86,8 @@ module ChunkedUploadManager {
             };
             
             // Calculate chunks needed
-            let totalChunks = if (MAX_CHUNK_SIZE > 0) {
-                if (MAX_CHUNK_SIZE > 0 and totalSize > 0) {
-                    (totalSize + (if (MAX_CHUNK_SIZE > 0) { MAX_CHUNK_SIZE - 1 } else { 0 })) / MAX_CHUNK_SIZE
-                } else {
-                    1
-                }
+            let totalChunks = if (MAX_CHUNK_SIZE > 0 and totalSize > 0) {
+                Int.abs((totalSize + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE)
             } else {
                 1
             };
@@ -146,7 +142,7 @@ module ChunkedUploadManager {
                     };
                     
                     // Validate chunk size
-                    let expectedSize = if (session.totalChunks > 0 and chunkInfo.chunkIndex == session.totalChunks - 1) {
+                    let expectedSize = if (session.totalChunks > 0 and chunkInfo.chunkIndex + 1 == session.totalChunks) {
                         // Last chunk might be smaller
                         if (session.totalSize <= MAX_CHUNK_SIZE) {
                             session.totalSize
@@ -358,7 +354,7 @@ module ChunkedUploadManager {
                             data = chunk;
                             chunkIndex = chunkIndex;
                             totalChunks = cachedChunks.size();
-                            isLast = cachedChunks.size() > 0 and chunkIndex == cachedChunks.size() - 1;
+                            isLast = cachedChunks.size() > 0 and chunkIndex + 1 == cachedChunks.size();
                         });
                     };
                 };
@@ -370,12 +366,8 @@ module ChunkedUploadManager {
                 case (?videoData) {
                     let videoArray = Blob.toArray(videoData);
                     let totalSize = videoArray.size();
-                    let totalChunks = if (requestedChunkSize > 0) {
-                        if (requestedChunkSize > 0) {
-                            (totalSize + requestedChunkSize - 1) / requestedChunkSize
-                        } else {
-                            1
-                        }
+                    let totalChunks = if (requestedChunkSize > 0 and totalSize > 0) {
+                        Int.abs((totalSize + requestedChunkSize - 1) / requestedChunkSize)
                     } else {
                         1
                     };
@@ -391,7 +383,11 @@ module ChunkedUploadManager {
                         return #err("Chunk index out of range");
                     };
                     
-                    let chunkSize = if (endPos > startPos) { endPos - startPos } else { 0 };
+                    let chunkSize = if (endPos >= startPos) { 
+                        Int.abs(endPos - startPos) 
+                    } else { 
+                        0 
+                    };
                     if (chunkSize == 0) {
                         return #err("Invalid chunk size");
                     };
@@ -402,7 +398,7 @@ module ChunkedUploadManager {
                         data = Blob.fromArray(chunkArray);
                         chunkIndex = chunkIndex;
                         totalChunks = totalChunks;
-                        isLast = totalChunks > 0 and chunkIndex == totalChunks - 1;
+                        isLast = totalChunks > 0 and chunkIndex + 1 == totalChunks;
                     })
                 };
                 case null {
@@ -416,12 +412,8 @@ module ChunkedUploadManager {
             switch (videoStorage.get(videoId)) {
                 case (?videoData) {
                     let totalSize = Blob.toArray(videoData).size();
-                    let totalChunks = if (MAX_CHUNK_SIZE > 0) {
-                        if (MAX_CHUNK_SIZE > 0) {
-                            (totalSize + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE
-                        } else {
-                            1
-                        }
+                    let totalChunks = if (MAX_CHUNK_SIZE > 0 and totalSize > 0) {
+                        Int.abs((totalSize + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE)
                     } else {
                         1
                     };
@@ -474,12 +466,8 @@ module ChunkedUploadManager {
         private func prepareForStreaming(videoId: Text, videoData: Blob) {
             let videoArray = Blob.toArray(videoData);
             let totalSize = videoArray.size();
-            let totalChunks = if (MAX_CHUNK_SIZE > 0) {
-                if (MAX_CHUNK_SIZE > 0) {
-                    (totalSize + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE
-                } else {
-                    1
-                }
+            let totalChunks = if (MAX_CHUNK_SIZE > 0 and totalSize > 0) {
+                Int.abs((totalSize + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE)
             } else {
                 1
             };
@@ -491,8 +479,8 @@ module ChunkedUploadManager {
                     let startPos = i * MAX_CHUNK_SIZE;
                     let endPos = Nat.min(startPos + MAX_CHUNK_SIZE, totalSize);
                     
-                    if (startPos < totalSize and endPos > startPos) {
-                        let chunkSize = endPos - startPos;
+                    if (startPos < totalSize and endPos >= startPos) {
+                        let chunkSize = Int.abs(endPos - startPos);
                         let chunkArray = Array.subArray(videoArray, startPos, chunkSize);
                         chunks.add(Blob.fromArray(chunkArray));
                     };

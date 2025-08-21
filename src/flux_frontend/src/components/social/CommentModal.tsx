@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { useAppStore } from '../../store/appStore';
 import { formatNumber } from '../../lib/utils';
+import { getSafeAvatar } from '../../lib/imageUtils';
 
 interface Comment {
   id: string;
@@ -39,7 +40,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         id: '2',
         username: 'techfan',
         displayName: 'Tech Fan',
-        avatar: 'https://images.pexels.com/photos/1081685/pexels-photo-1081685.jpeg?auto=compress&cs=tinysrgb&w=50&h=50&fit=crop',
+        avatar: getSafeAvatar(2),
       },
       text: 'This is amazing! Love the content 🔥',
       likes: 24,
@@ -52,7 +53,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         id: '3',
         username: 'creator_pro',
         displayName: 'Creator Pro',
-        avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=50&h=50&fit=crop',
+        avatar: getSafeAvatar(3),
       },
       text: 'Great work! Keep it up 👏',
       likes: 12,

@@ -6,6 +6,7 @@ import { Avatar } from '../ui/Avatar';
 import { useAppStore } from '../../store/appStore';
 import toast from 'react-hot-toast';
 import { useWallet } from '../../hooks/useWallet';
+import { getSafeAvatar, getSafeThumbnail } from '../../lib/imageUtils';
 
 
 interface EditProfileModalProps {
@@ -78,9 +79,11 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         };
         reader.readAsDataURL(file);
       } else {
-        // Generate a random image from Pexels
+        // Generate a safe placeholder image
         await new Promise(resolve => setTimeout(resolve, 1000));
-        const mockImageUrl = `https://images.pexels.com/photos/${Math.floor(Math.random() * 1000000)}/pexels-photo-${Math.floor(Math.random() * 1000000)}.jpeg?auto=compress&cs=tinysrgb&w=${type === 'avatar' ? '400&h=400' : '800&h=300'}&fit=crop`;
+        const mockImageUrl = type === 'avatar' 
+          ? getSafeAvatar(Math.floor(Math.random() * 6))
+          : getSafeThumbnail(Math.floor(Math.random() * 5), 800, 300);
         setFormData(prev => ({ ...prev, [type]: mockImageUrl }));
       }
       

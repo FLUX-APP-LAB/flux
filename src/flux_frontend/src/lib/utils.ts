@@ -1,7 +1,8 @@
 import { clsx, type ClassValue } from 'clsx';
+import { getSafeAvatar, getSafeThumbnail } from './imageUtils';
 
 export function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
+  return clsx(...inputs);
 }
 
 export function formatNumber(num: number): string {
@@ -22,17 +23,17 @@ export function formatDuration(seconds: number): string {
 
 export function generateMockData() {
   const mockUsers = [
-    { id: '1', username: 'techcreator', displayName: 'Tech Creator', avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop' },
-    { id: '2', username: 'musicvibes', displayName: 'Music Vibes', avatar: 'https://images.pexels.com/photos/1081685/pexels-photo-1081685.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop' },
-    { id: '3', username: 'artstream', displayName: 'Art Stream', avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop' },
-    { id: '4', username: 'gamerpro', displayName: 'Gamer Pro', avatar: 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop' },
+    { id: '1', username: 'techcreator', displayName: 'Tech Creator', avatar: getSafeAvatar(1) },
+    { id: '2', username: 'musicvibes', displayName: 'Music Vibes', avatar: getSafeAvatar(2) },
+    { id: '3', username: 'artstream', displayName: 'Art Stream', avatar: getSafeAvatar(3) },
+    { id: '4', username: 'gamerpro', displayName: 'Gamer Pro', avatar: getSafeAvatar(4) },
   ];
 
   const mockVideos = [
     {
       id: '1',
       title: 'Amazing Tech Review',
-      thumbnail: 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=400&h=600&fit=crop',
+      thumbnail: getSafeThumbnail(1, 400, 600),
       videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
       creator: mockUsers[0],
       views: 125000,

@@ -12,6 +12,25 @@ export const StreamDashboard: React.FC = () => {
   const [chatVisible, setChatVisible] = useState(true);
   const [mode, setMode] = useState<'viewer' | 'streamer'>('viewer');
 
+  // Demo canister configuration - in production, this would come from environment or props
+  const demoCanisterId = 'rrkah-fqaaa-aaaaa-aaaaq-cai';
+  const demoIdlFactory = {
+    // Mock IDL factory for demo purposes
+    createActor: () => ({
+      startGameStream: async () => ({ success: true, streamId: 'demo-stream-123' }),
+      stopStream: async () => ({ success: true }),
+      getActiveStreams: async () => [],
+      watchStream: async () => ({ success: true }),
+      leaveStream: async () => ({ success: true }),
+      // WebRTC specific methods
+      createWebRTCStream: async (streamData: any) => ({ ok: streamData }),
+      joinStream: async (streamId: string, offer: string) => ({ ok: true }),
+      getPendingViewers: async (streamId: string) => ({ ok: [] }),
+      sendAnswer: async (answerData: any) => ({ ok: true }),
+      sendIceCandidate: async (candidateData: any) => ({ ok: true })
+    })
+  };
+
   useEffect(() => {
     const { mockStreams } = generateMockData();
     setActiveStreams(mockStreams);
@@ -20,19 +39,49 @@ export const StreamDashboard: React.FC = () => {
     }
   }, [setActiveStreams, setCurrentStream]);
 
-  // Determine if current user is the streamer
+  // Determine if current user is the streamer and set mode immediately
   useEffect(() => {
     if (currentStream && currentUser) {
-      setMode(currentStream.creator.id === currentUser.id ? 'streamer' : 'viewer');
+      const isStreamerMode = currentStream.creator.id === currentUser.id;
+      setMode(isStreamerMode ? 'streamer' : 'viewer');
+      
+      // Only auto-initialize for new streams, not when switching
+      if (isStreamerMode && !hasInitialized) {
+        // Longer delay to ensure the WebRTC component is ready and prevent race conditions
+        setTimeout(() => {
+          const event = new CustomEvent('forceStreamRestart', {
+            detail: { mode: 'streamer', autoStart: true }
+          });
+          window.dispatchEvent(event);
+          setHasInitialized(true);
+        }, 1000);
+      }
     }
   }, [currentStream, currentUser]);
 
+  const [hasInitialized, setHasInitialized] = useState(false);
+
   const handleStreamStart = (stream: MediaStream) => {
     console.log('Stream started in dashboard:', stream.getTracks());
+    // Update stream status to live when stream starts
+    if (currentStream) {
+      setCurrentStream({
+        ...currentStream,
+        isLive: true,
+        viewers: currentStream.viewers + 1
+      });
+    }
   };
 
   const handleStreamEnd = () => {
     console.log('Stream ended in dashboard');
+    // Update stream status when stream ends
+    if (currentStream) {
+      setCurrentStream({
+        ...currentStream,
+        isLive: false
+      });
+    }
   };
 
   if (!currentStream) {
@@ -57,6 +106,9 @@ export const StreamDashboard: React.FC = () => {
         <WebRTCStream
           streamId={currentStream.id}
           isStreamer={mode === 'streamer'}
+          mode={mode}
+          canisterId={demoCanisterId}
+          idlFactory={demoIdlFactory}
           onStreamStart={handleStreamStart}
           onStreamEnd={handleStreamEnd}
           className="w-full h-full"
@@ -110,7 +162,20 @@ export const StreamDashboard: React.FC = () => {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => setMode(mode === 'viewer' ? 'streamer' : 'viewer')}
+            onClick={() => {
+              const newMode = mode === 'viewer' ? 'streamer' : 'viewer';
+              setMode(newMode);
+              
+              // Auto-initialize stream when switching to streamer mode
+              if (newMode === 'streamer') {
+                setTimeout(() => {
+                  const event = new CustomEvent('forceStreamRestart', {
+                    detail: { mode: 'streamer', autoStart: true }
+                  });
+                  window.dispatchEvent(event);
+                }, 100);
+              }
+            }}
           >
             <Monitor className="w-4 h-4 mr-2" />
             {mode === 'viewer' ? 'Switch to Streamer' : 'Switch to Viewer'}

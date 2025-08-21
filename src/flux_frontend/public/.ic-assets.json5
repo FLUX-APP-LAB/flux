@@ -23,10 +23,11 @@
             // - frame-ancestors: none mitigates clickjacking attacks. See https://owasp.org/www-community/attacks/Clickjacking.
             // - Added blob: to img-src for blob URLs support
             // - Added media-src for video/audio content
-            // - Added https://images.pexels.com for external image sources
-            // - Added blob: to connect-src for blob URL connections (avatar handling, etc.)
-            // - Added data: to connect-src for data URL connections (avatar handling, etc.)
-            "Content-Security-Policy": "default-src 'self';script-src 'self';connect-src 'self' blob: data: http://localhost:* http://127.0.0.1:* https://icp0.io https://*.icp0.io https://icp-api.io;img-src 'self' data: blob: https://images.pexels.com https://*.pexels.com;media-src 'self' blob: https://commondatastorage.googleapis.com;style-src * 'unsafe-inline';style-src-elem * 'unsafe-inline';font-src *;object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
+            // - Added https://picsum.photos for safe placeholder images
+            // - Added https://via.placeholder.com for placeholder images  
+            // - Added https://avataaars.io for avatar generation
+            // - Added https://robohash.org for avatar generation
+            "Content-Security-Policy": "default-src 'self';script-src 'self';connect-src 'self' blob: data: http://localhost:* http://127.0.0.1:* https://icp0.io https://*.icp0.io https://icp-api.io;img-src 'self' data: blob: https://images.pexels.com https://*.pexels.com https://picsum.photos https://via.placeholder.com https://avataaars.io https://robohash.org;media-src 'self' blob: https://commondatastorage.googleapis.com;style-src * 'unsafe-inline';style-src-elem * 'unsafe-inline';font-src *;object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
 
             // Security: The permissions policy enables camera and microphone for streaming functionality
             // Only includes recognized permissions policy features

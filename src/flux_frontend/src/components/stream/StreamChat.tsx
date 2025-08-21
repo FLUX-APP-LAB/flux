@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { ChatMessage } from '../../store/appStore';
+import { getSafeAvatar } from '../../lib/imageUtils';
 
 interface StreamChatProps {
   streamId: string;
@@ -88,7 +89,7 @@ export const StreamChat: React.FC<StreamChatProps> = ({ streamId, className }) =
               className="flex items-start space-x-3"
             >
               <Avatar
-                src={`https://images.pexels.com/photos/${Math.floor(Math.random() * 1000000)}/pexels-photo-${Math.floor(Math.random() * 1000000)}.jpeg?auto=compress&cs=tinysrgb&w=32&h=32&fit=crop`}
+                src={getSafeAvatar(message.id ? parseInt(message.id) : undefined)}
                 alt={message.username}
                 size="xs"
               />

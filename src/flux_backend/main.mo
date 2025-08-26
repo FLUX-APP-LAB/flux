@@ -9,6 +9,8 @@ import Bool "mo:base/Bool";
 import Buffer "mo:base/Buffer";
 import Iter "mo:base/Iter";
 import Int "mo:base/Int";
+import Float "mo:base/Float";
+import Char "mo:base/Char";
 import VideoManager "video";
 import LiveStreamManager "livestream";
 import TokenManager "token";
@@ -513,7 +515,11 @@ persistent actor UserManager {
                     return #err("Insufficient coins");
                 };
                 
-                let newBalance = user.coinBalance - cost; // Safe subtraction since we checked above
+                // Convert to Int for safe subtraction, then back to Nat
+                let balanceInt : Int = user.coinBalance;
+                let costInt : Int = cost;
+                let resultInt = balanceInt - costInt;
+                let newBalance = Int.abs(resultInt);
                 let updatedUser = { user with coinBalance = newBalance; lastActive = Time.now() };
                 users.put(caller, updatedUser);
             };
@@ -971,7 +977,7 @@ persistent actor UserManager {
         }
     };
 
-    public query func getUserRelationship(targetUser: Principal) : async Result.Result<UserRelationship, Text> {
+    public query func getUserRelationship(_targetUser: Principal) : async Result.Result<UserRelationship, Text> {
         // Note: This would need the caller context, so it should be a shared function
         // For now, returning an error as query functions don't have access to msg.caller
         #err("Use getUserRelationshipWithAuth instead")
@@ -1829,6 +1835,97 @@ persistent actor UserManager {
         chunkedUploadService.getVideoStreamInfo(videoId)
     };
     
+    // Helper functions
+    private func isUserFollowing(follower: Principal, followee: Principal) : Bool {
+        switch (users.get(follower)) {
+            case (?user) {
+                Array.find<Principal>(user.following, func(p: Principal) : Bool { p == followee }) != null
+            };
+            case null { false };
+        }
+    };
+    
+    private func isUserSubscribed(subscriber: Principal, streamer: Principal) : Bool {
+        let subscriptionKey = Principal.toText(subscriber) # "_" # Principal.toText(streamer);
+        switch (subscriptions.get(subscriptionKey)) {
+            case (?subscription) { subscription.isActive and subscription.endDate > Time.now() };
+            case null { false };
+        }
+    };
+    
+    private func calculateSubscriptionCost(tier: Nat, duration: Nat) : Nat {
+        let baseCost = switch (tier) {
+            case 1 { 500 };  // Tier 1: 500 coins per month
+            case 2 { 1000 }; // Tier 2: 1000 coins per month
+            case 3 { 2500 }; // Tier 3: 2500 coins per month
+            case _ { 500 };  // Default to tier 1
+        };
+        baseCost * duration
+    };
+    
+    private func validateUsername(username: Text) : Result.Result<(), Text> {
+        let len = Text.size(username);
+        if (len < 3) {
+            return #err("Username must be at least 3 characters");
+        };
+        if (len > 30) {
+            return #err("Username must be less than 30 characters");
+        };
+        // Check for valid characters (alphanumeric and underscore)
+        for (char in username.chars()) {
+            if (not (Char.isAlphabetic(char) or Char.isDigit(char) or char == '_')) {
+                return #err("Username can only contain letters, numbers, and underscores");
+            };
+        };
+        #ok()
+    };
+    
+    private func validateEmail(email: Text) : Bool {
+        // Simple email validation - check for @ symbol and basic structure
+        let chars = Text.toArray(email);
+        var atCount = 0;
+        var atIndex : ?Nat = null;
+        var dotAfterAt = false;
+        
+        for (i in chars.keys()) {
+            if (chars[i] == '@') {
+                atCount += 1;
+                atIndex := ?i;
+            };
+        };
+        
+        // Must have exactly one @ symbol
+        if (atCount != 1) {
+            return false;
+        };
+        
+        // Check for dot after @
+        switch (atIndex) {
+            case (?index) {
+                for (i in chars.keys()) {
+                    if (i > index and chars[i] == '.') {
+                        dotAfterAt := true;
+                    };
+                };
+            };
+            case null { return false; };
+        };
+        
+        dotAfterAt and Text.size(email) > 5
+    };
+    
+    private func isAdmin(user: Principal) : Bool {
+        switch (users.get(user)) {
+            case (?userInfo) {
+                switch (userInfo.tier) {
+                    case (#Admin) { true };
+                    case _ { false };
+                }
+            };
+            case null { false };
+        }
+    };
+
     // System maintenance functions
     public shared(_msg) func cleanupExpiredSessions() : async Nat {
         let webrtcCleaned = webRTCService.cleanupExpiredConnections();

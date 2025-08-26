@@ -6,7 +6,6 @@ import Principal "mo:base/Principal";
 import Text "mo:base/Text";
 import Nat "mo:base/Nat";
 import Float "mo:base/Float";
-import Iter "mo:base/Iter";
 
 module AnalyticsManager {
     public type MetricType = {
@@ -47,8 +46,8 @@ module AnalyticsManager {
         commentRatio: Float;
         shareRatio: Float;
         retentionRate: Float;
-        demographics: HashMap.HashMap<Text, Nat>;
-        trafficSources: HashMap.HashMap<Text, Nat>;
+        demographics: [(Text, Nat)]; // Changed from HashMap to array for shareability
+        trafficSources: [(Text, Nat)]; // Changed from HashMap to array for shareability
         peakViewerTime: Int;
         createdAt: Int;
         lastViewedAt: Int;
@@ -147,8 +146,8 @@ module AnalyticsManager {
                         commentRatio = 0.0;
                         shareRatio = 0.0;
                         retentionRate = if (watchTime > 30.0) 1.0 else 0.0;
-                        demographics = HashMap.HashMap<Text, Nat>(0, Text.equal, Text.hash);
-                        trafficSources = HashMap.HashMap<Text, Nat>(0, Text.equal, Text.hash);
+                        demographics = []; // Empty array instead of HashMap
+                        trafficSources = []; // Empty array instead of HashMap
                         peakViewerTime = now;
                         createdAt = now;
                         lastViewedAt = now;
@@ -496,7 +495,7 @@ module AnalyticsManager {
         };
 
         // Advanced Analytics Functions
-        public func recordUserAction(userId: Principal, action: Text, contentId: ?Text, metadata: ?Text) : async Result.Result<(), Text> {
+        public func recordUserAction(userId: Principal, action: Text, contentId: ?Text, _metadata: ?Text) : async Result.Result<(), Text> {
             // Validate inputs
             if (Text.size(action) == 0) {
                 return #err("Action cannot be empty");
@@ -509,22 +508,25 @@ module AnalyticsManager {
                 case (?existing) {
                     let updated = switch (action) {
                         case ("like") {
-                            existing with 
-                            totalLikes = existing.totalLikes + 1;
-                            lastUpdated = now;
+                            { existing with 
+                              totalLikes = existing.totalLikes + 1;
+                              lastUpdated = now;
+                            }
                         };
                         case ("comment") {
-                            existing with 
-                            totalComments = existing.totalComments + 1;
-                            lastUpdated = now;
+                            { existing with 
+                              totalComments = existing.totalComments + 1;
+                              lastUpdated = now;
+                            }
                         };
                         case ("share") {
-                            existing with 
-                            totalShares = existing.totalShares + 1;
-                            lastUpdated = now;
+                            { existing with 
+                              totalShares = existing.totalShares + 1;
+                              lastUpdated = now;
+                            }
                         };
                         case (_) {
-                            existing with lastUpdated = now;
+                            { existing with lastUpdated = now }
                         };
                     };
                     
@@ -558,7 +560,7 @@ module AnalyticsManager {
                                     } else {
                                         1.0
                                     };
-                                    existing with likeRatio = newLikeRatio;
+                                    { existing with likeRatio = newLikeRatio }
                                 };
                                 case ("comment") {
                                     let newCommentRatio = if (existing.views > 0) {
@@ -566,7 +568,7 @@ module AnalyticsManager {
                                     } else {
                                         1.0
                                     };
-                                    existing with commentRatio = newCommentRatio;
+                                    { existing with commentRatio = newCommentRatio }
                                 };
                                 case ("share") {
                                     let newShareRatio = if (existing.views > 0) {
@@ -574,7 +576,7 @@ module AnalyticsManager {
                                     } else {
                                         1.0
                                     };
-                                    existing with shareRatio = newShareRatio;
+                                    { existing with shareRatio = newShareRatio }
                                 };
                                 case (_) existing;
                             };
@@ -792,13 +794,15 @@ module AnalyticsManager {
             }
         };
 
-        private func addRecommendationDiversity(recommendations: [RecommendationScore], userHistory: [Text]) : [RecommendationScore] {
+        private func addRecommendationDiversity(recommendations: [RecommendationScore], _userHistory: [Text]) : [RecommendationScore] {
             // Add diversity to prevent echo chambers
             var diversified: [RecommendationScore] = [];
             var usedCategories: [Text] = [];
             
             // First pass: Add top recommendations from different categories
-            for (rec in recommendations.vals()) {
+            var i = 0;
+            while (i < recommendations.size() and diversified.size() < 15) {
+                let rec = recommendations[i];
                 switch (contentMetrics.get(rec.contentId)) {
                     case (?metrics) {
                         // For simplicity, using content type as category
@@ -814,26 +818,26 @@ module AnalyticsManager {
                     };
                     case null { };
                 };
-                
-                if (diversified.size() >= 15) {
-                    break;
-                };
+                i += 1;
             };
             
             // Second pass: Fill remaining slots with highest-scoring content
-            if (diversified.size() < 20) {
-                let remaining = 20 - diversified.size();
+            let maxResults = 20;
+            if (diversified.size() < maxResults) {
+                let currentSize = diversified.size();
+                let remaining = Nat.sub(maxResults, currentSize); // Use safe subtraction
                 let existingIds = Array.map<RecommendationScore, Text>(diversified, func(rec) = rec.contentId);
                 
                 var added = 0;
-                for (rec in recommendations.vals()) {
-                    if (added >= remaining) break;
-                    
+                var j = 0;
+                while (j < recommendations.size() and added < remaining) {
+                    let rec = recommendations[j];
                     let alreadyIncluded = Array.find<Text>(existingIds, func(id) { Text.equal(id, rec.contentId) }) != null;
                     if (not alreadyIncluded) {
                         diversified := Array.append(diversified, [rec]);
                         added += 1;
                     };
+                    j += 1;
                 };
             };
             

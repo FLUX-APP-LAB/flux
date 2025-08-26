@@ -373,7 +373,7 @@ export const DiscoverScreen: React.FC = () => {
               </motion.div>
             ))}
           </div>
-        }
+            )}
 
         {activeTab === 'creators' && (
           <div className="space-y-6">
@@ -465,7 +465,7 @@ export const DiscoverScreen: React.FC = () => {
                   </motion.div>
                 ))}
               </div>
-            
+            </div>
 
             {/* Legacy Suggested Creators (fallback) */}
             {suggestedCreators.length > 0 && topUsers.length === 0 && (
@@ -514,10 +514,11 @@ export const DiscoverScreen: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
           </>
-
-    )}
-  </div>
-</div>
+        )}
+      </div>
+    </div>
   );
 };

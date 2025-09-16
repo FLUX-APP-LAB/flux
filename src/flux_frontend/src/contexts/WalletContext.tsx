@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthClient } from "@dfinity/auth-client";
 import { Principal } from "@dfinity/principal";
+import { Identity } from "@dfinity/agent";
 import { idlFactory } from '../../../declarations/flux_backend/flux_backend.did.js';
 import { Actor, HttpAgent } from '@dfinity/agent';
 import { useAppStore } from '../store/appStore';
+import { authUtils } from '../lib/authUtils';
 
 interface WalletContextType {
   isAuthenticated: boolean;
@@ -11,7 +13,7 @@ interface WalletContextType {
   logout: () => Promise<void>;
   principal: string;
   newAuthActor: any;
-  identity: any;
+  identity: Identity | null;
   // Additional wallet properties for compatibility
   walletAddress: string | null;
   isConnected: boolean;
@@ -19,11 +21,14 @@ interface WalletContextType {
   isLoadingBalance: boolean;
   transactions: any[];
   isLoadingTransactions: boolean;
+  isInitializing: boolean;
+  authError: string | null;
   getBalance: () => Promise<any>;
   getTransactionHistory: () => Promise<any[]>;
   getUser: (principal: string) => Promise<any>;
   fetchAndSetCurrentUser: (principal: string) => Promise<any>;
   refreshCurrentUser: () => Promise<any>;
+  refreshIdentity: () => Promise<boolean>;
   purchaseBits: (amount: number) => Promise<boolean>;
   sendGift: (recipient: string, giftType: string, amount: number) => Promise<boolean>;
   cheerWithBits: (streamer: string, amount: number) => Promise<boolean>;
@@ -55,23 +60,38 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const [authClient, setAuthClient] = useState<AuthClient | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [principal, setPrincipal] = useState("");
-  const [identity, setIdentity] = useState<any>(null);
+  const [identity, setIdentity] = useState<Identity | null>(null);
   const [newAuthActor, setAuthActor] = useState<any>(null);
   const [balance, setBalance] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   
   const days = BigInt(1);
   const hours = BigInt(24);
   const nanoSeconds = BigInt(3600000000000);
 
-  const network = import.meta.env.VITE_DFX_NETWORK || 'local';
-  const isLocal = network === 'local' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const network = import.meta.env.DFX_NETWORK || import.meta.env.VITE_DFX_NETWORK || 'local';
   
-  const identityProvider = !isLocal
+  // Check if we're on IC mainnet first (more specific check)
+  const isMainnet = window.location.hostname.includes('.icp0.io') || 
+    window.location.hostname.includes('.ic0.app') ||
+    network === 'ic';
+  
+  // Only consider it local if explicitly local network AND localhost hostname
+  const isLocal = !isMainnet && (
+    (network === 'local' && (
+      window.location.hostname === 'localhost' || 
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.includes('.localhost')
+    ))
+  );
+  
+  const identityProvider = isMainnet || (!isLocal && network !== 'local')
     ? 'https://identity.ic0.app' 
-    : `http://${import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'uzt4z-lp777-77774-qaabq-cai'}.localhost:4943`;
+    : `http://${import.meta.env.CANISTER_ID_INTERNET_IDENTITY || import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'uzt4z-lp777-77774-qaabq-cai'}.localhost:4943`;
 
   const defaultOptions = {
     createOptions: {
@@ -85,7 +105,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     },
   };
 
-  const { setCurrentUser } = useAppStore();
+  const { setCurrentUser, setAuthenticated, setWalletAddress, setPrincipal: setAppPrincipal } = useAppStore();
 
   // Helper to fetch and set current user in store
   const fetchAndSetCurrentUser = async (userPrincipal: string) => {
@@ -94,12 +114,59 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     return user;
   };
 
+  // Sync authentication state with app store
+  useEffect(() => {
+    setAuthenticated(isAuthenticated);
+    setWalletAddress(isAuthenticated ? principal : null);
+    setAppPrincipal(isAuthenticated ? principal : null);
+  }, [isAuthenticated, principal, setAuthenticated, setWalletAddress, setAppPrincipal]);
+
+  // Periodic identity refresh to ensure validity
+  useEffect(() => {
+    if (!isAuthenticated || !authClient) return;
+
+    const refreshInterval = setInterval(async () => {
+      try {
+        const isStillAuth = await authClient.isAuthenticated();
+        if (!isStillAuth) {
+          console.log('Identity expired, logging out');
+          await logout();
+          return;
+        }
+        
+        // Refresh identity to ensure it's still valid
+        await refreshIdentity();
+      } catch (error) {
+        console.error('Error during periodic identity check:', error);
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, [isAuthenticated, authClient]);
+
   useEffect(() => {
     initAuth();
   }, []);
 
   async function initAuth() {
     try {
+      setIsInitializing(true);
+      setAuthError(null);
+      
+      console.log('Environment detection:', {
+        network,
+        isLocal,
+        isMainnet,
+        hostname: window.location.hostname,
+        identityProvider,
+        DFX_NETWORK: import.meta.env.DFX_NETWORK,
+        VITE_DFX_NETWORK: import.meta.env.VITE_DFX_NETWORK,
+        CANISTER_ID_INTERNET_IDENTITY: import.meta.env.CANISTER_ID_INTERNET_IDENTITY,
+        VITE_CANISTER_ID_INTERNET_IDENTITY: import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY,
+        CANISTER_ID_FLUX_BACKEND: import.meta.env.CANISTER_ID_FLUX_BACKEND,
+        VITE_CANISTER_ID_FLUX_BACKEND: import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND
+      });
+      
       console.log('Initializing AuthClient...', { 
         isLocal, 
         identityProvider,
@@ -113,26 +180,84 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       console.log('Authentication status:', isAuthenticated);
       
       if (isAuthenticated) {
-        await handleAuthenticated(client);
+        // Validate existing identity before proceeding
+        const existingIdentity = await client.getIdentity();
+        if (validateIdentity(existingIdentity)) {
+          await handleAuthenticated(client);
+        } else {
+          console.warn('Existing identity is invalid, clearing auth state');
+          await client.logout();
+          authUtils.clearAuthState();
+        }
+      } else {
+        // Check if we should attempt auto-auth based on saved state
+        const shouldAutoAuth = authUtils.shouldAttemptAutoAuth();
+        if (shouldAutoAuth) {
+          console.log('Attempting auto-authentication based on saved state...');
+          // Don't auto-login, just clear the invalid state
+          authUtils.clearAuthState();
+        }
       }
     } catch (error) {
       console.error("Authentication initialization error:", error);
+      setAuthError(error instanceof Error ? error.message : 'Authentication initialization failed');
+    } finally {
+      setIsInitializing(false);
     }
   }
+
+  // Helper function to validate identity
+  const validateIdentity = (identity: Identity): boolean => {
+    try {
+      if (!identity) {
+        console.error('Identity is null or undefined');
+        return false;
+      }
+      
+      const principal = identity.getPrincipal();
+      if (!principal) {
+        console.error('Failed to get principal from identity');
+        return false;
+      }
+      
+      const principalText = principal.toString();
+      if (!principalText || principalText.length === 0) {
+        console.error('Principal is empty');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error validating identity:', error);
+      return false;
+    }
+  };
 
   async function handleAuthenticated(client: AuthClient) {
     try {
       const identity = await client.getIdentity();
-      console.log('identity :>> ', identity);
+      console.log('Retrieved identity:', identity);
+      
+      // Validate identity before proceeding
+      if (!validateIdentity(identity)) {
+        throw new Error('Invalid identity received from authentication');
+      }
+      
       setIdentity(identity);
       setIsAuthenticated(true);
 
       const principal = identity.getPrincipal();
       const principalIdFull = principal.toString();
       setPrincipal(principalIdFull);
+      
+      console.log('Authentication successful for principal:', principalIdFull);
+      
+      // Save auth state to localStorage
+      authUtils.saveAuthState(true, principalIdFull);
 
       console.log('Creating HttpAgent...', {
         isLocal,
+        isMainnet,
         host: isLocal ? 'http://localhost:4943' : 'https://ic0.app'
       });
 
@@ -151,12 +276,31 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         }
       }
 
-      const canisterId = import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 'uxrrr-q7777-77774-qaaaq-cai';
+      // Get the correct canister ID based on environment
+      let canisterId;
+      if (isMainnet || (!isLocal && network !== 'local')) {
+        // Use mainnet canister ID - try multiple environment variable sources
+        canisterId = import.meta.env.CANISTER_ID_FLUX_BACKEND || 
+                    import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 
+                    'rhgnb-siaaa-aaaau-abyla-cai'; // Hardcoded mainnet canister ID as final fallback
+      } else {
+        // Use local development canister ID
+        canisterId = import.meta.env.CANISTER_ID_FLUX_BACKEND || 
+                    import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 
+                    'uxrrr-q7777-77774-qaaaq-cai'; // Local development fallback
+      }
       
       console.log('Creating actor with:', {
         canisterId,
         agentHost: agent.host,
-        identityPrincipal: principal.toString()
+        identityPrincipal: principal.toString(),
+        isMainnet,
+        isLocal,
+        network,
+        envVars: {
+          CANISTER_ID_FLUX_BACKEND: import.meta.env.CANISTER_ID_FLUX_BACKEND,
+          VITE_CANISTER_ID_FLUX_BACKEND: import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND
+        }
       });
 
       const newAuthActor = Actor.createActor(idlFactory, {
@@ -166,63 +310,197 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       console.log('newAuthActor created successfully');
       setAuthActor(newAuthActor);
 
-      // Fetch and set user profile in global store
-      if (typeof fetchAndSetCurrentUser === 'function') {
+      // Fetch user profile using the freshly created actor to avoid state update race
+      try {
+        let principalObj;
         try {
-          await fetchAndSetCurrentUser(principalIdFull);
-        } catch (e) {
-          console.error('Failed to fetch user profile after authentication:', e);
+          principalObj = Principal.fromText(principalIdFull);
+        } catch (principalError) {
+          console.error('Invalid principal format when fetching current user:', principalIdFull, principalError);
+          principalObj = null;
         }
+
+        if (principalObj) {
+          const result = await Promise.race([
+            newAuthActor.getUser(principalObj),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('User lookup timeout')), 10000))
+          ]);
+
+          const raceResult: any = result as any;
+          if (raceResult && 'ok' in raceResult) {
+            const backendUser: any = raceResult.ok;
+
+            let avatarUrl = '/default-avatar.png';
+            if (backendUser.avatar && backendUser.avatar.length > 0 && backendUser.avatar[0]) {
+              const base64Avatar = backendUser.avatar[0];
+              if (base64Avatar && typeof base64Avatar === 'string') {
+                avatarUrl = base64Avatar.startsWith('data:image/')
+                  ? base64Avatar
+                  : `data:image/jpeg;base64,${base64Avatar}`;
+              }
+            }
+
+            let bannerUrl;
+            if (backendUser.banner && backendUser.banner.length > 0 && backendUser.banner[0]) {
+              const base64Banner = backendUser.banner[0];
+              if (base64Banner && typeof base64Banner === 'string') {
+                bannerUrl = base64Banner.startsWith('data:image/')
+                  ? base64Banner
+                  : `data:image/jpeg;base64,${base64Banner}`;
+              }
+            }
+
+            const frontendUser = {
+              id: backendUser.id.toString(),
+              username: backendUser.username,
+              displayName: backendUser.displayName,
+              avatar: avatarUrl,
+              followerCount: Number(backendUser.followers?.length || 0),
+              followingCount: Number(backendUser.following?.length || 0),
+              subscriberCount: Number(backendUser.subscribers?.length || 0),
+              isLiveStreaming: false,
+              tier: backendUser.tier?.Partner ? 'platinum' : 
+                    backendUser.tier?.Creator ? 'gold' : 
+                    backendUser.tier?.Premium ? 'silver' : 'bronze' as 'bronze' | 'silver' | 'gold' | 'platinum',
+              banner: bannerUrl,
+              walletAddress: principalIdFull,
+              principal: principalIdFull,
+              bio: Array.isArray(backendUser.bio) ? backendUser.bio[0] || '' : backendUser.bio || '',
+              location: backendUser.location?.[0] || '',
+              website: Array.isArray(backendUser.socialLinks?.website)
+                ? backendUser.socialLinks.website.filter(Boolean)
+                : backendUser.socialLinks?.website
+                  ? [backendUser.socialLinks.website]
+                  : [],
+            };
+
+            setCurrentUser(frontendUser);
+          } else {
+            // No existing user; keep currentUser null to trigger signup in App
+            console.log('No existing user profile found for principal:', principalIdFull);
+            setCurrentUser(null);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch user profile after authentication (direct actor):', e);
       }
+      
+      // Set initializing to false after authentication is complete
+      setIsInitializing(false);
     } catch (error) {
       console.error('Error in handleAuthenticated:', error);
+      setAuthError(error instanceof Error ? error.message : 'Authentication failed');
       setIsAuthenticated(false);
       setIdentity(null);
+      setIsInitializing(false);
       setAuthActor(null);
       setPrincipal("");
+      // Clear saved auth state on error
+      authUtils.clearAuthState();
     }
   }
 
   async function login() {
     if (!authClient) {
       console.error('AuthClient not initialized');
+      setAuthError('Authentication client not initialized');
       return;
     }
     
     try {
+      setAuthError(null);
       console.log('Starting login process...');
-      await authClient.login({
-        ...defaultOptions.loginOptions,
-        onSuccess: async () => {
-          try {
-            console.log('Login successful, handling authentication...');
-            await handleAuthenticated(authClient);
-          } catch (error) {
-            console.error('Error handling authentication:', error);
+      
+      return new Promise<void>((resolve, reject) => {
+        authClient!.login({
+          ...defaultOptions.loginOptions,
+          onSuccess: async () => {
+            try {
+              console.log('Login successful, handling authentication...');
+              await handleAuthenticated(authClient!);
+              resolve();
+            } catch (error) {
+              console.error('Error handling authentication:', error);
+              setAuthError(error instanceof Error ? error.message : 'Authentication failed');
+              reject(error);
+            }
+          },
+          onError: (error: unknown) => {
+            console.error('Login failed:', error);
+            setAuthError(error instanceof Error ? error.message : 'Login failed');
+            reject(error);
           }
-        },
-        onError: (error) => {
-          console.error('Login failed:', error);
-        }
+        });
       });
     } catch (error) {
       console.error('Error during login:', error);
+      setAuthError(error instanceof Error ? error.message : 'Login failed');
+      throw error;
     }
   }
+
+  // Function to refresh identity from auth client
+  const refreshIdentity = async (): Promise<boolean> => {
+    if (!authClient) {
+      console.error('AuthClient not available for identity refresh');
+      return false;
+    }
+    
+    try {
+      const isAuth = await authClient.isAuthenticated();
+      if (!isAuth) {
+        console.log('User is not authenticated, cannot refresh identity');
+        return false;
+      }
+      
+      const newIdentity = await authClient.getIdentity();
+      if (!validateIdentity(newIdentity)) {
+        console.error('Refreshed identity is invalid');
+        return false;
+      }
+      
+      setIdentity(newIdentity);
+      const principal = newIdentity.getPrincipal();
+      const principalIdFull = principal.toString();
+      setPrincipal(principalIdFull);
+      
+      console.log('Identity refreshed successfully for principal:', principalIdFull);
+      return true;
+    } catch (error) {
+      console.error('Error refreshing identity:', error);
+      setAuthError(error instanceof Error ? error.message : 'Identity refresh failed');
+      return false;
+    }
+  };
 
   async function logout() {
     if (!authClient) return;
     
     try {
       await authClient.logout();
+      
+      // Clear all identity-related state
       setIdentity(null);
       setAuthActor(null);
       setIsAuthenticated(false);
       setPrincipal("");
       setBalance(null);
       setTransactions([]);
+      setAuthError(null);
+      
+      // Clear saved auth state
+      authUtils.clearAuthState();
+      
+      // Clear app store state
+      setCurrentUser(null);
+      setAuthenticated(false);
+      setWalletAddress(null);
+      setAppPrincipal(null);
+      
+      console.log('Logout completed successfully');
     } catch (error) {
       console.error('Error logging out:', error);
+      setAuthError(error instanceof Error ? error.message : 'Logout failed');
     }
   }
 
@@ -276,7 +554,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   const getUser = async (userPrincipal: string) => {
     if (!newAuthActor) {
-      console.error('Actor not initialized');
+      console.error('Actor not initialized - cannot fetch user');
       return null;
     }
     
@@ -296,10 +574,20 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         return null;
       }
       
-      const result = await newAuthActor.getUser(principalObj);
+      // Add timeout to prevent hanging
+      const result = await Promise.race([
+        newAuthActor.getUser(principalObj),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('User lookup timeout')), 10000)
+        )
+      ]);
       
       if ('ok' in result) {
-        console.log('User found:', result.ok);
+        console.log('User found successfully:', {
+          username: result.ok.username,
+          displayName: result.ok.displayName,
+          principal: userPrincipal
+        });
         const backendUser = result.ok;
         
         let avatarUrl = '/default-avatar.png';
@@ -333,9 +621,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
           username: backendUser.username,
           displayName: backendUser.displayName,
           avatar: avatarUrl,
-          followerCount: backendUser.followers?.length || 0,
-          followingCount: backendUser.following?.length || 0,
-          subscriberCount: backendUser.subscribers?.length || 0,
+          followerCount: Number(backendUser.followers?.length || 0), // Convert to number
+          followingCount: Number(backendUser.following?.length || 0), // Convert to number
+          subscriberCount: Number(backendUser.subscribers?.length || 0), // Convert to number
           isLiveStreaming: false, 
           tier: backendUser.tier?.Partner ? 'platinum' : 
                 backendUser.tier?.Creator ? 'gold' : 
@@ -360,11 +648,17 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         
         return frontendUser;
       } else {
-        console.log('User not found:', result.err);
+        console.log('User not found in backend:', {
+          principal: userPrincipal,
+          error: result.err
+        });
         return null;
       }
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error('Error fetching user from backend:', {
+        principal: userPrincipal,
+        error: error instanceof Error ? error.message : error
+      });
       return null;
     }
   };
@@ -514,17 +808,20 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     isLoadingBalance,
     transactions,
     isLoadingTransactions,
+    isInitializing,
+    authError,
     getBalance,
     getTransactionHistory,
     getUser,
     fetchAndSetCurrentUser,
+    refreshCurrentUser,
+    refreshIdentity,
     purchaseBits,
     sendGift,
     cheerWithBits,
     requestPayout,
     formatWalletAddress,
     disconnectWallet,
-    refreshCurrentUser,
     updateProfile,
   };
 

@@ -38,7 +38,7 @@ interface ValidationErrors {
 }
 
 export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
-  const { newAuthActor, getUser } = useWallet();
+  const { newAuthActor, getUser, authError } = useWallet();
   const [formData, setFormData] = useState<FormData>({
     username: '',
     displayName: '',
@@ -63,6 +63,13 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
       setPrincipal(principal);
     }
   }, [isAuthenticated, principal, setWalletAddress, setPrincipal]);
+
+  // Show error message if there's an authentication error
+  useEffect(() => {
+    if (authError) {
+      toast.error(`Authentication error: ${authError}`);
+    }
+  }, [authError]);
 
   const validateField = (field: keyof FormData, value: string): string | undefined => {
     switch (field) {

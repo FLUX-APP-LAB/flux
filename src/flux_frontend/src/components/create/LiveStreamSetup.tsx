@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Camera, Mic, Settings, X, Eye, EyeOff, Upload, Gamepad2, Video } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store/appStore';
+import { useWallet } from '../../hooks/useWallet';
+import { StreamingService } from '../../lib/streamingService';
 import toast from 'react-hot-toast';
 import { getSafeThumbnail } from '../../lib/imageUtils';
 import { WebRTCStream } from '../stream/WebRTCStream';
@@ -28,7 +31,9 @@ export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({
   const [showPreview, setShowPreview] = useState(true);
   const [streamKey] = useState('flux_' + Math.random().toString(36).substr(2, 9));
   
-  const { currentUser, activeStreams, setActiveStreams, setCurrentStream, setActivePage } = useAppStore();
+  const navigate = useNavigate();
+  const { newAuthActor } = useWallet();
+  const { currentUser, activeStreams, setActiveStreams, setCurrentStream } = useAppStore();
 
   const categories = [
     'Gaming', 'Music', 'Art', 'Technology', 'Education', 
@@ -41,38 +46,87 @@ export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({
       return;
     }
 
-    setIsStarting(true);
-
-    // Simulate stream setup
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    const newStream = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      thumbnail: getSafeThumbnail(1, 400, 300),
-      creator: currentUser!,
-      viewers: 0,
-      isLive: true,
-      category,
-      description,
-      isPrivate,
-      streamKey,
-      startedAt: new Date(),
-    };
-
-    // Add to active streams
-    setActiveStreams([newStream, ...activeStreams]);
-    setCurrentStream(newStream);
-    
-    // Update user status
-    if (currentUser) {
-      currentUser.isLiveStreaming = true;
+    if (!newAuthActor) {
+      toast.error('Please connect your wallet first');
+      return;
     }
 
-    setIsStarting(false);
-    toast.success('Stream started successfully!');
-    setActivePage('stream');
-    onClose();
+    setIsStarting(true);
+
+    try {
+      // Create streaming service instance
+      const streamingService = new StreamingService(newAuthActor);
+      
+      // Create stream on backend
+      const streamId = await streamingService.createStream(
+        title.trim(),
+        description,
+        category,
+        [], // tags
+        'General', // maturityRating
+        'P720' // quality
+      );
+
+      if (!streamId) {
+        throw new Error('Failed to create stream on backend');
+      }
+
+      // Start the stream
+      const started = await streamingService.startStream(streamId);
+      if (!started) {
+        throw new Error('Failed to start stream');
+      }
+
+      const newStream = {
+        id: streamId,
+        title: title.trim(),
+        description,
+        thumbnail: getSafeThumbnail(1, 400, 300),
+        creator: {
+          id: currentUser!.id,
+          username: currentUser!.username,
+          displayName: currentUser!.displayName,
+          avatar: currentUser!.avatar,
+          isLiveStreaming: true,
+        },
+        viewers: 0,
+        isLive: true,
+        category,
+        streamUrl: `/stream/${streamId}`,
+        streamKey,
+        shareUrl: `${window.location.origin}/stream/${streamId}`,
+        startedAt: new Date(),
+        metrics: {
+          peakViewers: 0,
+          averageViewers: 0,
+          totalViews: 0,
+          engagement: 0,
+        },
+      };
+
+      // Add to active streams
+      setActiveStreams([newStream, ...activeStreams]);
+      setCurrentStream(newStream);
+      
+      // Update user status
+      if (currentUser) {
+        currentUser.isLiveStreaming = true;
+      }
+
+      toast.success('Stream started successfully!');
+      
+      // Small delay to ensure state is updated before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Navigate to the new stream page
+      navigate(`/stream/${streamId}`);
+      onClose();
+    } catch (error) {
+      console.error('Error starting stream:', error);
+      toast.error('Failed to start stream. Please try again.');
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   const handleStreamStart = (stream: MediaStream) => {

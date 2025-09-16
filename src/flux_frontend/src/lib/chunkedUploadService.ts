@@ -411,7 +411,8 @@ export class ChunkedUploadService {
     }
 
     // Return a blob with the first chunk for immediate playback
-    return new Blob([chunks[0] || new Uint8Array(0)], { type: 'video/mp4' });
+    const firstChunk = chunks[0] || new Uint8Array(0);
+    return new Blob([firstChunk as BlobPart], { type: 'video/mp4' });
   }
 
   private async blobToUint8Array(blob: Blob): Promise<Uint8Array> {
@@ -430,7 +431,7 @@ export class ChunkedUploadService {
   }
 
   private async calculateChecksum(data: Uint8Array): Promise<string> {
-    const hashArray = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = await crypto.subtle.digest('SHA-256', data as BufferSource);
     const hashHex = Array.from(new Uint8Array(hashArray))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
@@ -527,7 +528,7 @@ export class VideoStreamingService {
         const chunk = await this.getChunkWithCache(videoId, i);
         
         if (chunk) {
-          sourceBuffer.appendBuffer(chunk);
+          sourceBuffer.appendBuffer(chunk as BufferSource);
           
           // Wait for append to complete
           await new Promise((resolve) => {

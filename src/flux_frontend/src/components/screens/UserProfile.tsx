@@ -8,10 +8,12 @@ import { useAppStore } from '../../store/appStore';
 import { generateMockData, formatNumber } from '../../lib/utils';
 import { User, Video, LiveStream } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
+import { UserService } from '../../lib/userService';
+import { toast } from 'react-hot-toast';
 
 
 export const UserProfile: React.FC = () => {
-  const { currentUser, setActivePage } = useAppStore();
+  const { currentUser, setActivePage, toggleFollowUser, isFollowingUser: isFollowingUserInStore } = useAppStore();
   const [activeTab, setActiveTab] = useState<'videos' | 'streams' | 'about'>('videos');
   const [userVideos, setUserVideos] = useState<Video[]>([]);
   const [userStreams, setUserStreams] = useState<LiveStream[]>([]);
@@ -19,7 +21,9 @@ export const UserProfile: React.FC = () => {
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { walletAddress, fetchAndSetCurrentUser } = useWallet();
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowingLoading, setIsFollowingLoading] = useState(false);
+  const { walletAddress, fetchAndSetCurrentUser, newAuthActor } = useWallet();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -53,6 +57,66 @@ export const UserProfile: React.FC = () => {
   }, [currentUser, walletAddress, fetchAndSetCurrentUser]);
 
   const isOwnProfile = currentUser?.id === profileUser?.id;
+
+  // Load follow status when profile user changes
+  useEffect(() => {
+    const loadFollowStatus = async () => {
+      if (!newAuthActor || !profileUser || isOwnProfile) return;
+
+      try {
+        const userService = new UserService(newAuthActor);
+        const relationship = await userService.getUserRelationship(profileUser.id);
+        const isFollowing = relationship === 'Following' || relationship === 'Mutual' || relationship === 'Subscriber';
+        setIsFollowing(isFollowing);
+        
+        // Update store with follow status
+        if (isFollowing && !isFollowingUserInStore(profileUser.id)) {
+          toggleFollowUser(profileUser.id);
+        } else if (!isFollowing && isFollowingUserInStore(profileUser.id)) {
+          toggleFollowUser(profileUser.id);
+        }
+      } catch (error) {
+        console.error('Error loading follow status:', error);
+      }
+    };
+
+    loadFollowStatus();
+  }, [profileUser, newAuthActor, isOwnProfile]);
+
+  const handleFollow = async () => {
+    if (!newAuthActor || !profileUser || isFollowingLoading) return;
+
+    setIsFollowingLoading(true);
+    try {
+      const userService = new UserService(newAuthActor);
+      let success = false;
+
+      if (isFollowing) {
+        success = await userService.unfollowUser(profileUser.id);
+        if (success) {
+          setIsFollowing(false);
+          toggleFollowUser(profileUser.id); // Update store
+          toast.success('Unfollowed user');
+        }
+      } else {
+        success = await userService.followUser(profileUser.id);
+        if (success) {
+          setIsFollowing(true);
+          toggleFollowUser(profileUser.id); // Update store
+          toast.success('Following user');
+        }
+      }
+
+      if (!success) {
+        toast.error(isFollowing ? 'Failed to unfollow user' : 'Failed to follow user');
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing user:', error);
+      toast.error('Failed to follow user');
+    } finally {
+      setIsFollowingLoading(false);
+    }
+  };
 
   useEffect(() => {
     const { mockVideos, mockStreams } = generateMockData();
@@ -150,8 +214,13 @@ export const UserProfile: React.FC = () => {
               </Button>
             ) : (
               <>
-                <Button size="sm" variant="secondary">
-                  Follow
+                <Button 
+                  size="sm" 
+                  variant={isFollowing ? "secondary" : "primary"}
+                  onClick={handleFollow}
+                  disabled={!newAuthActor || isFollowingLoading}
+                >
+                  {isFollowingLoading ? 'Loading...' : (isFollowing ? 'Following' : 'Follow')}
                 </Button>
                 <Button size="sm" variant="primary">
                   Subscribe

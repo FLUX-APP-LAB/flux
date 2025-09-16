@@ -1,4 +1,5 @@
 import { ActorSubclass } from '@dfinity/agent';
+import { Principal } from '@dfinity/principal';
 
 export interface BackendVideo {
   id: string;
@@ -49,7 +50,15 @@ export class VideoService {
   // Helper to get user data for better video display
   private async getUserInfo(principalId: string): Promise<{ username: string; displayName: string; avatar: string } | null> {
     try {
-      const result = await this.actor.getUser(principalId);
+      // Ensure we have a valid string
+      if (!principalId || typeof principalId !== 'string') {
+        console.warn('Invalid principal ID provided to getUserInfo:', principalId);
+        return null;
+      }
+      
+      // Convert string principal to Principal object
+      const principal = Principal.fromText(principalId);
+      const result = await this.actor.getUser(principal);
       if ('ok' in result) {
         const user = result.ok;
         return {
@@ -200,12 +209,17 @@ export class VideoService {
     // Create actual video URL from the uploaded video
     const videoUrl = await this.createBlobUrlFromChunks(backendVideo.id);
 
+    // Convert Principal to string for user ID
+    const creatorId = typeof backendVideo.creator === 'string' 
+      ? backendVideo.creator 
+      : String(backendVideo.creator);
+
     // Try to get actual user info
-    const userInfo = await this.getUserInfo(backendVideo.creator);
+    const userInfo = await this.getUserInfo(creatorId);
     
-    const username = userInfo?.username || backendVideo.creator.slice(0, 8);
-    const displayName = userInfo?.displayName || `User ${backendVideo.creator.slice(0, 8)}`;
-    const avatar = userInfo?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${backendVideo.creator}`;
+    const username = userInfo?.username || creatorId.slice(0, 8);
+    const displayName = userInfo?.displayName || `User ${creatorId.slice(0, 8)}`;
+    const avatar = userInfo?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creatorId}`;
 
     console.log('Transforming video with real URL:', {
       id: backendVideo.id,
@@ -220,14 +234,14 @@ export class VideoService {
       thumbnail: thumbnailUrl,
       videoUrl: videoUrl,
       creator: {
-        id: backendVideo.creator,
+        id: creatorId,
         username: username,
         displayName: displayName,
         avatar: avatar,
         isVerified: false
       },
-      views: backendVideo.analytics.views,
-      likes: backendVideo.analytics.likes,
+      views: Number(backendVideo.analytics.views),
+      likes: Number(backendVideo.analytics.likes),
       duration: 30, // Default duration - could be extracted from metadata
       isLiked: false, // Would need to check user's like status
       description: backendVideo.description,
@@ -268,14 +282,14 @@ export class VideoService {
       thumbnail: thumbnailUrl,
       videoUrl: videoUrl,
       creator: {
-        id: backendVideo.creator,
+        id: creatorText,
         username: username,
         displayName: displayName,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${backendVideo.creator}`,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${creatorText}`,
         isVerified: false
       },
-      views: backendVideo.analytics.views,
-      likes: backendVideo.analytics.likes,
+      views: Number(backendVideo.analytics.views),
+      likes: Number(backendVideo.analytics.likes),
       duration: 30, // Default duration - could be extracted from metadata
       isLiked: false, // Would need to check user's like status
       description: backendVideo.description,
@@ -336,6 +350,63 @@ export class VideoService {
       console.error('Failed to create blob URL from chunks:', error);
       // Fallback to placeholder
       return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+    }
+  }
+
+  async likeVideo(videoId: string): Promise<boolean> {
+    try {
+      const result = await this.actor.likeVideo(videoId);
+      return 'ok' in result;
+    } catch (error) {
+      console.error('Error liking video:', error);
+      return false;
+    }
+  }
+
+  async unlikeVideo(videoId: string): Promise<boolean> {
+    try {
+      const result = await this.actor.unlikeVideo(videoId);
+      return 'ok' in result;
+    } catch (error) {
+      console.error('Error unliking video:', error);
+      return false;
+    }
+  }
+
+  async hasUserLikedVideo(videoId: string): Promise<boolean> {
+    try {
+      const result = await this.actor.hasUserLikedVideo(videoId);
+      if ('ok' in result) {
+        return result.ok;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking if user liked video:', error);
+      return false;
+    }
+  }
+
+  async getVideoCommentsCount(videoId: string): Promise<number> {
+    try {
+      const result = await this.actor.getVideoComments(videoId, 1, 0);
+      // This is a simplified count - in a real implementation, you'd want a dedicated count endpoint
+      return Array.isArray(result) ? result.length : 0;
+    } catch (error) {
+      console.error('Error getting video comments count:', error);
+      return 0;
+    }
+  }
+
+  async checkUserLikedVideo(videoId: string): Promise<boolean> {
+    try {
+      // For now, we'll use a simple approach - in a real implementation,
+      // you'd want a dedicated backend method to check if user liked a video
+      // This is a placeholder that returns false
+      // TODO: Implement getUserVideoLikes or similar in backend
+      return false;
+    } catch (error) {
+      console.error('Error checking if user liked video:', error);
+      return false;
     }
   }
 }

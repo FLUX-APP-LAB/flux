@@ -44,7 +44,15 @@ export class AnalyticsService {
       const result = await this.actor.getUserEngagementTrends(userId, days);
       
       if ('ok' in result) {
-        return result.ok;
+        // Convert BigInt values to numbers
+        const data = result.ok;
+        return {
+          avgDailyViews: Number(data.avgDailyViews),
+          avgDailyEngagement: Number(data.avgDailyEngagement),
+          trendDirection: data.trendDirection,
+          peakDay: Number(data.peakDay),
+          lowDay: Number(data.lowDay),
+        };
       } else {
         console.error('Error getting engagement trends:', result.err);
         return null;
@@ -60,7 +68,23 @@ export class AnalyticsService {
       const result = await this.actor.getContentAnalytics(contentId);
       
       if ('ok' in result) {
-        return result.ok;
+        // Convert BigInt values to numbers
+        const data = result.ok;
+        return {
+          contentId: data.contentId,
+          views: Number(data.views),
+          uniqueViewers: Number(data.uniqueViewers),
+          avgWatchTime: Number(data.avgWatchTime),
+          likeRatio: Number(data.likeRatio),
+          commentRatio: Number(data.commentRatio),
+          shareRatio: Number(data.shareRatio),
+          retentionRate: Number(data.retentionRate),
+          createdAt: Number(data.createdAt),
+          lastViewedAt: Number(data.lastViewedAt),
+          totalWatchTime: Number(data.totalWatchTime),
+          completionRate: Number(data.completionRate),
+          skipRate: Number(data.skipRate),
+        };
       } else {
         console.error('Error getting content analytics:', result.err);
         return null;
@@ -90,7 +114,16 @@ export class AnalyticsService {
   async getTopPerformingContent(timeframe: number = 7 * 24 * 60 * 60 * 1000_000_000, limit: number = 10): Promise<any[]> {
     try {
       const result = await this.actor.getTopPerformingContent(timeframe, limit);
-      return result || [];
+      if (Array.isArray(result)) {
+        // Convert BigInt values to numbers
+        return result.map((content: any) => ({
+          ...content,
+          views: Number(content.views),
+          score: Number(content.score),
+          engagement: Number(content.engagement),
+        }));
+      }
+      return [];
     } catch (error) {
       console.error('Error getting top performing content:', error);
       return [];

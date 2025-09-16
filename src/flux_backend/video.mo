@@ -85,6 +85,7 @@ module VideoManager {
 
     public type Comment = {
         id: Text;
+        videoId: Text;
         user: Principal;
         content: Text;
         timestamp: Int;
@@ -162,6 +163,7 @@ module VideoManager {
         // State
         private var videos = HashMap.HashMap<Text, Video>(0, Text.equal, Text.hash);
         private var comments = HashMap.HashMap<Text, Comment>(0, Text.equal, Text.hash);
+        private var commentLikes = HashMap.HashMap<Text, Bool>(0, Text.equal, Text.hash);
         private var processingJobs = HashMap.HashMap<Text, VideoProcessingJob>(0, Text.equal, Text.hash);
         private var interactions = HashMap.HashMap<Text, VideoInteraction>(0, Text.equal, Text.hash);
         private var playlists = HashMap.HashMap<Text, Playlist>(0, Text.equal, Text.hash);
@@ -404,6 +406,46 @@ module VideoManager {
         }
     };
 
+    public func unlikeVideo(caller: Principal, videoId: Text) : async Result.Result<(), Text> {
+        switch (videos.get(videoId)) {
+            case (?video) {
+                // Check if user has liked this video
+                let interactionId = Principal.toText(caller) # "_" # videoId # "_like";
+                switch (interactions.get(interactionId)) {
+                    case (?_) {
+                        // User has liked, so unlike
+                        interactions.delete(interactionId);
+                        
+                        // Decrease like count (ensure it doesn't go below 0)
+                        let currentLikes = video.analytics.likes;
+                        let newLikes = if (currentLikes > 0) { 
+                            Int.abs(Int.max(0, Int.sub(Int.abs(currentLikes), 1)))
+                        } else { 0 };
+                        
+                        let updatedAnalytics = {
+                            video.analytics with
+                            likes = newLikes;
+                        };
+                        let updatedVideo = { video with analytics = updatedAnalytics };
+                        videos.put(videoId, updatedVideo);
+                        
+                        #ok()
+                    };
+                    case null { #err("User has not liked this video") };
+                }
+            };
+            case null { #err("Video not found") };
+        }
+    };
+
+    public func hasUserLikedVideo(caller: Principal, videoId: Text) : async Result.Result<Bool, Text> {
+        let interactionId = Principal.toText(caller) # "_" # videoId # "_like";
+        switch (interactions.get(interactionId)) {
+            case (?_) { #ok(true) };
+            case null { #ok(false) };
+        }
+    };
+
     public func addComment(caller: Principal, videoId: Text, content: Text, _parentCommentId: ?Text) : async Result.Result<Text, Text> {
         let commentId = "comment_" # Principal.toText(caller) # "_" # Int.toText(Time.now());
         
@@ -415,6 +457,7 @@ module VideoManager {
                 
                 let comment : Comment = {
                     id = commentId;
+                    videoId = videoId;
                     user = caller;
                     content = content;
                     timestamp = Time.now();
@@ -440,6 +483,44 @@ module VideoManager {
             };
             case null { #err("Video not found") };
         }
+    };
+
+    public func likeComment(caller: Principal, commentId: Text) : async Result.Result<(), Text> {
+        switch (comments.get(commentId)) {
+            case (?comment) {
+                // Check if user already liked this comment
+                let likeId = Principal.toText(caller) # "_" # commentId;
+                switch (commentLikes.get(likeId)) {
+                    case (?_) {
+                        // User already liked, so unlike
+                        commentLikes.delete(likeId);
+                        let currentLikes : Int = comment.likes;
+                        let newLikes : Nat = Int.abs(Int.max(0, currentLikes - 1));
+                        let updatedComment = {
+                            comment with
+                            likes = newLikes;
+                        };
+                        comments.put(commentId, updatedComment);
+                        #ok()
+                    };
+                    case null {
+                        // User hasn't liked, so add like
+                        commentLikes.put(likeId, true);
+                        let updatedComment = {
+                            comment with
+                            likes = comment.likes + 1;
+                        };
+                        comments.put(commentId, updatedComment);
+                        #ok()
+                    };
+                }
+            };
+            case null { #err("Comment not found") };
+        }
+    };
+
+    public func toggleCommentLike(caller: Principal, commentId: Text) : async Result.Result<(), Text> {
+        await likeComment(caller, commentId)
     };
 
     public func shareVideo(caller: Principal, videoId: Text, platform: Text) : async Result.Result<(), Text> {
@@ -755,37 +836,49 @@ module VideoManager {
         let endIndex = Nat.min(limit, sortedVideos.size());
         Array.subArray(sortedVideos, 0, endIndex)
     };        public func getVideoComments(videoId: Text, limit: Nat, offset: Nat) : [Comment] {
-        // Return video comments with pagination
-        switch (videos.get(videoId)) {
-            case (?video) {
-                let videoComments = video.comments;
-                let totalComments = videoComments.size();
-                
-                if (offset >= totalComments) {
-                    return [];
-                };
-                
-                // Sort comments by timestamp (newest first)
-                let sortedComments = Array.sort(videoComments, func(a: Comment, b: Comment) : {#less; #equal; #greater} {
-                    if (a.timestamp > b.timestamp) { #less }
-                    else if (a.timestamp < b.timestamp) { #greater }
-                    else { #equal }
-                });
-                
-                let endIndex = Nat.min(offset + limit, totalComments);
-                if (endIndex > offset) {
-                    let items = Array.subArray(sortedComments, offset, totalComments);
-                    if (items.size() <= limit) {
-                        items
-                    } else {
-                        Array.subArray(items, 0, limit)
-                    }
-                } else {
-                    []
-                }
-            };
-            case null { [] };
-        }
+        // Get all comments for this video from the comments HashMap
+        let allComments = Iter.toArray(comments.vals());
+        
+        // Debug: Log all comment video IDs
+        // This will help us see what video IDs are actually stored
+        
+        // Filter comments for this specific video
+        let videoComments = Array.filter(allComments, func(comment: Comment) : Bool {
+            comment.videoId == videoId
+        });
+        
+        let totalComments = videoComments.size();
+        
+        if (offset >= totalComments) {
+            return [];
+        };
+        
+        // Sort comments by timestamp (newest first)
+        let sortedComments = Array.sort(videoComments, func(a: Comment, b: Comment) : {#less; #equal; #greater} {
+            if (a.timestamp > b.timestamp) { #less }
+            else if (a.timestamp < b.timestamp) { #greater }
+            else { #equal }
+        });
+        
+        // Apply pagination manually
+        let startIndex = offset;
+        let endIndex = Nat.min(offset + limit, totalComments);
+        
+        if (startIndex >= endIndex) {
+            return [];
+        };
+        
+        // Create result array with pagination
+        let result = Array.tabulate<Comment>(endIndex - startIndex, func(i: Nat) : Comment {
+            sortedComments[startIndex + i]
+        });
+        
+        result
+    };
+
+    // Debug function to get all comments (for testing)
+    public func getAllComments() : [Comment] {
+        Iter.toArray(comments.vals())
     };        public func getVideoAnalytics(videoId: Text) : Result.Result<VideoAnalytics, Text> {
         switch (videos.get(videoId)) {
             case (?video) { #ok(video.analytics) };

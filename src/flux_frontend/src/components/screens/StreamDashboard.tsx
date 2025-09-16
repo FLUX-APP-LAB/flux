@@ -11,6 +11,7 @@ export const StreamDashboard: React.FC = () => {
   const { activeStreams, currentStream, setActiveStreams, setCurrentStream, setActivePage, currentUser } = useAppStore();
   const [chatVisible, setChatVisible] = useState(true);
   const [mode, setMode] = useState<'viewer' | 'streamer'>('viewer');
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Demo canister configuration - in production, this would come from environment or props
   const demoCanisterId = 'rrkah-fqaaa-aaaaa-aaaaq-cai';
@@ -43,7 +44,13 @@ export const StreamDashboard: React.FC = () => {
   useEffect(() => {
     if (currentStream && currentUser) {
       const isStreamerMode = currentStream.creator.id === currentUser.id;
-      setMode(isStreamerMode ? 'streamer' : 'viewer');
+      const newMode = isStreamerMode ? 'streamer' : 'viewer';
+      
+      // Only update mode if it's actually different to prevent unnecessary re-renders
+      if (mode !== newMode) {
+        setMode(newMode);
+        setHasInitialized(false); // Reset initialization flag when mode changes
+      }
       
       // Only auto-initialize for new streams, not when switching
       if (isStreamerMode && !hasInitialized) {
@@ -57,9 +64,7 @@ export const StreamDashboard: React.FC = () => {
         }, 1000);
       }
     }
-  }, [currentStream, currentUser]);
-
-  const [hasInitialized, setHasInitialized] = useState(false);
+  }, [currentStream, currentUser, mode, hasInitialized]);
 
   const handleStreamStart = (stream: MediaStream) => {
     console.log('Stream started in dashboard:', stream.getTracks());

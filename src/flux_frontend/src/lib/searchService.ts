@@ -115,13 +115,13 @@ export class SearchService {
       banner: backendUser.banner ? 
         `data:image/jpeg;base64,${btoa(String.fromCharCode(...backendUser.banner))}` :
         '/17517500282326374985607665398759.jpg',
-      followersCount: backendUser.followers.length,
-      followingCount: backendUser.following.length,
+      followersCount: Number(backendUser.followers.length), // Convert to number
+      followingCount: Number(backendUser.following.length), // Convert to number
       followers: backendUser.followers,  // Include all followers
       following: backendUser.following,  // Include all users this user follows
       isVerified: backendUser.isVerified,
       isFollowing: this.currentUserId ? backendUser.followers.includes(this.currentUserId) : false,
-      videoCount: backendUser.videoCount,
+      videoCount: Number(backendUser.videoCount), // Convert to number
       createdAt: new Date(Number(backendUser.createdAt) / 1000000), // Convert nanoseconds to milliseconds
     };
   }
@@ -230,7 +230,39 @@ export class SearchService {
       const result = await this.actor.getUserActivitySummary(userId);
       
       if ('ok' in result) {
-        return result.ok;
+        // Convert BigInt values to numbers in the user activity summary
+        const data = result.ok;
+        return {
+          profile: {
+            username: data.profile.username,
+            displayName: data.profile.displayName,
+            tier: data.profile.tier,
+            verificationStatus: data.profile.verificationStatus,
+            createdAt: Number(data.profile.createdAt),
+            lastActive: Number(data.profile.lastActive),
+          },
+          stats: {
+            totalViews: Number(data.stats.totalViews),
+            totalLikes: Number(data.stats.totalLikes),
+            totalStreams: Number(data.stats.totalStreams),
+            totalStreamTime: Number(data.stats.totalStreamTime),
+            averageViewers: Number(data.stats.averageViewers),
+            peakViewers: Number(data.stats.peakViewers),
+            totalRevenue: Number(data.stats.totalRevenue),
+            followersGained30d: Number(data.stats.followersGained30d),
+            viewsGained30d: Number(data.stats.viewsGained30d),
+          },
+          relationships: {
+            followers: Number(data.relationships.followers),
+            following: Number(data.relationships.following),
+            subscribers: Number(data.relationships.subscribers),
+          },
+          activity: {
+            isOnline: data.activity.isOnline,
+            daysSinceLastActive: Number(data.activity.daysSinceLastActive),
+            engagementLevel: data.activity.engagementLevel,
+          },
+        };
       } else {
         console.error('Error getting user activity summary:', result.err);
         return null;
@@ -244,7 +276,17 @@ export class SearchService {
   async getTopUsers(metric: string = 'followers', limit: number = 10): Promise<TopUser[]> {
     try {
       const result = await this.actor.getTopUsers(metric, limit);
-      return result || [];
+      if (Array.isArray(result)) {
+        // Convert BigInt values to numbers
+        return result.map((user: any) => ({
+          userId: user.userId,
+          username: user.username,
+          displayName: user.displayName,
+          value: Number(user.value),
+          tier: user.tier,
+        }));
+      }
+      return [];
     } catch (error) {
       console.error('Error getting top users:', error);
       return [];
@@ -254,7 +296,18 @@ export class SearchService {
   async getPlatformStats(): Promise<PlatformStats | null> {
     try {
       const result = await this.actor.getPlatformStats();
-      return result || null;
+      if (result) {
+        // Convert BigInt values to numbers
+        return {
+          totalUsers: Number(result.totalUsers),
+          activeUsers: Number(result.activeUsers),
+          totalSubscriptions: Number(result.totalSubscriptions),
+          totalRevenue: Number(result.totalRevenue),
+          verifiedUsers: Number(result.verifiedUsers),
+          partneredUsers: Number(result.partneredUsers),
+        };
+      }
+      return null;
     } catch (error) {
       console.error('Error getting platform stats:', error);
       return null;

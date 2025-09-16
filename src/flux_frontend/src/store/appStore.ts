@@ -67,6 +67,7 @@ interface AppState {
   // Content state
   videoFeed: Video[];
   currentVideoIndex: number;
+  followingUsers: Set<string>; // Set of user IDs that the current user is following
   
   // Streaming state
   activeStreams: LiveStream[];
@@ -86,6 +87,8 @@ interface AppState {
   setVideoFeed: (videos: Video[]) => void;
   setCurrentVideoIndex: (index: number) => void;
   toggleVideoLike: (videoId: string) => void;
+  toggleFollowUser: (userId: string) => void;
+  isFollowingUser: (userId: string) => boolean;
   setActiveStreams: (streams: LiveStream[]) => void;
   setCurrentStream: (stream: LiveStream | null) => void;
   toggleTheme: () => void;
@@ -102,6 +105,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   principal: null,
   videoFeed: [],
   currentVideoIndex: 0,
+  followingUsers: new Set<string>(),
   activeStreams: [],
   currentStream: null,
   theme: 'dark',
@@ -123,6 +127,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         : video
     )
   })),
+  toggleFollowUser: (userId) => set((state) => {
+    const newFollowingUsers = new Set(state.followingUsers);
+    if (newFollowingUsers.has(userId)) {
+      newFollowingUsers.delete(userId);
+    } else {
+      newFollowingUsers.add(userId);
+    }
+    return { followingUsers: newFollowingUsers };
+  }),
+  isFollowingUser: (userId) => {
+    const state = get();
+    return state.followingUsers.has(userId);
+  },
   setActiveStreams: (streams) => set({ activeStreams: streams }),
   setCurrentStream: (stream) => set({ currentStream: stream }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),

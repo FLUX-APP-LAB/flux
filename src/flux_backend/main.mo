@@ -1094,6 +1094,46 @@ persistent actor UserManager {
         result
     };
 
+    public shared(msg) func unlikeVideo(videoId: Text) : async Result.Result<(), Text> {
+        let result = await videoManager.unlikeVideo(msg.caller, videoId);
+        
+        // Update user stats on successful unlike
+        switch (result) {
+            case (#ok()) {
+                switch (users.get(msg.caller)) {
+                    case (?user) {
+                        let currentTotalLikes = user.stats.totalLikes;
+                        let newTotalLikes = if (currentTotalLikes > 0) { 
+                            currentTotalLikes - 1
+                        } else { 0 };
+                        
+                        let updatedStats = {
+                            user.stats with
+                            totalLikes = newTotalLikes;
+                        };
+                        let updatedUser = { 
+                            user with 
+                            stats = updatedStats;
+                            lastActive = Time.now();
+                        };
+                        users.put(msg.caller, updatedUser);
+                        
+                        // Record analytics
+                        ignore analyticsManager.recordUserAction(msg.caller, "unlike", ?videoId, null);
+                    };
+                    case null { };
+                };
+            };
+            case (#err(_)) { };
+        };
+        
+        result
+    };
+
+    public shared(msg) func hasUserLikedVideo(videoId: Text) : async Result.Result<Bool, Text> {
+        await videoManager.hasUserLikedVideo(msg.caller, videoId)
+    };
+
     public shared(msg) func addComment(videoId: Text, content: Text, parentCommentId: ?Text) : async Result.Result<Text, Text> {
         await videoManager.addComment(msg.caller, videoId, content, parentCommentId)
     };
@@ -1169,6 +1209,19 @@ persistent actor UserManager {
 
     public query func getVideoComments(videoId: Text, limit: Nat, offset: Nat) : async [VideoManager.Comment] {
         videoManager.getVideoComments(videoId, limit, offset)
+    };
+
+    // Debug function to get all comments
+    public query func getAllComments() : async [VideoManager.Comment] {
+        videoManager.getAllComments()
+    };
+
+    public shared(msg) func likeComment(commentId: Text) : async Result.Result<(), Text> {
+        await videoManager.likeComment(msg.caller, commentId)
+    };
+
+    public shared(msg) func toggleCommentLike(commentId: Text) : async Result.Result<(), Text> {
+        await videoManager.toggleCommentLike(msg.caller, commentId)
     };
 
     public query func getVideoAnalytics(videoId: Text) : async Result.Result<VideoManager.VideoAnalytics, Text> {

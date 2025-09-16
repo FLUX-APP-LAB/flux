@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Home, 
   Search, 
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   Plus,
   DollarSign,
+  User,
   Zap
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -28,8 +30,6 @@ import { CreateContentModal } from '../create/CreateContentModal';
 
 export const DesktopSidebar: React.FC = () => {
   const { 
-    activePage, 
-    setActivePage, 
     currentUser, 
     setAuthenticated, 
     setCurrentUser,
@@ -44,31 +44,34 @@ export const DesktopSidebar: React.FC = () => {
     isConnected 
   } = useWallet();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const mainNavItems = [
-    { id: 'home', icon: Home, label: 'Home', badge: null },
-    { id: 'discover', icon: Search, label: 'Discover', badge: null },
-    { id: 'following', icon: Users, label: 'Following', badge: '12' },
-    { id: 'stream', icon: Radio, label: 'Live Streams', badge: null },
+    { id: 'home', path: '/home', icon: Home, label: 'Home', badge: null },
+    { id: 'discover', path: '/discover', icon: Search, label: 'Discover', badge: null },
+    { id: 'following', path: '/home', icon: Users, label: 'Following', badge: '12' },
+    { id: 'streams', path: '/streams', icon: Radio, label: 'Live Streams', badge: null },
   ] as const;
 
   const secondaryNavItems = [
-    { id: 'trending', icon: TrendingUp, label: 'Trending', badge: null },
-    { id: 'gaming', icon: Gamepad2, label: 'Gaming Hub', badge: 'New' },
-    { id: 'rewards', icon: Trophy, label: 'Rewards', badge: null },
-    { id: 'saved', icon: Bookmark, label: 'Saved', badge: null },
+    { id: 'trending', path: '/trending', icon: TrendingUp, label: 'Trending', badge: null },
+    { id: 'gaming', path: '/gaming', icon: Gamepad2, label: 'Gaming Hub', badge: 'New' },
+    { id: 'rewards', path: '/rewards', icon: Trophy, label: 'Rewards', badge: null },
+    { id: 'saved', path: '/saved', icon: Bookmark, label: 'Saved', badge: null },
   ] as const;
 
   const bottomNavItems = [
-    { id: 'notifications', icon: Bell, label: 'Notifications', badge: '3' },
-    { id: 'settings', icon: Settings, label: 'Settings', badge: null },
+    { id: 'profile', path: '/profile', icon: User, label: 'Profile', badge: null },
+    { id: 'notifications', path: '/notifications', icon: Bell, label: 'Notifications', badge: '3' },
+    { id: 'settings', path: '/settings', icon: Settings, label: 'Settings', badge: null },
   ] as const;
 
-  const handleNavClick = (itemId: string) => {
-    if (itemId === 'create') {
+  const handleNavClick = (item: { id: string; path?: string }) => {
+    if (item.id === 'create') {
       setShowCreateModal(true);
-    } else {
-      setActivePage(itemId as any);
+    } else if (item.path) {
+      navigate(item.path);
     }
   };
 
@@ -76,7 +79,14 @@ export const DesktopSidebar: React.FC = () => {
     await disconnectWallet();
     setAuthenticated(false);
     setCurrentUser(null);
-    setActivePage('home');
+    navigate('/landing');
+  };
+
+  const isActiveRoute = (path: string) => {
+    if (path === '/home') {
+      return location.pathname === '/home' || location.pathname === '/';
+    }
+    return location.pathname.startsWith(path);
   };
 
   return (
@@ -99,10 +109,10 @@ export const DesktopSidebar: React.FC = () => {
               </motion.div>
             )}
             <Button
-              size="sm"
               variant="ghost"
+              size="sm"
               onClick={() => setDesktopSidebarCollapsed(!desktopSidebarCollapsed)}
-              className="ml-auto"
+              className="text-flux-text-secondary hover:text-flux-text-primary"
             >
               {desktopSidebarCollapsed ? (
                 <ChevronRight className="w-4 h-4" />
@@ -113,49 +123,57 @@ export const DesktopSidebar: React.FC = () => {
           </div>
         </div>
 
-        {/* User Profile Section */}
-        <div className="p-4 border-b border-flux-bg-tertiary">
-          <div className="flex items-center space-x-3">
-            <Avatar
-              src={currentUser?.avatar}
-              alt={currentUser?.displayName || ''}
-              size="lg"
-              isLive={currentUser?.isLiveStreaming}
-              tier={currentUser?.tier}
-            />
-            {!desktopSidebarCollapsed && (
-              <motion.div
-                initial={{ opacity: 1 }}
-                animate={{ opacity: desktopSidebarCollapsed ? 0 : 1 }}
-                className="flex-1 min-w-0"
+        {/* Profile Section */}
+        {!desktopSidebarCollapsed && currentUser && (
+          <div className="p-4 border-b border-flux-bg-tertiary">
+            <div className="flex items-center space-x-3 mb-4">
+              <div 
+                onClick={() => navigate('/profile')}
+                className="cursor-pointer hover:opacity-80 transition-opacity"
               >
+                <Avatar 
+                  src={currentUser.avatar} 
+                  alt={currentUser.displayName}
+                  size="md"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
                 <p className="text-flux-text-primary font-semibold truncate">
-                  {currentUser?.displayName}
+                  {currentUser.displayName}
                 </p>
                 <p className="text-flux-text-secondary text-sm truncate">
-                  @{currentUser?.username}
+                  @{currentUser.username}
                 </p>
-                <div className="flex items-center space-x-4 mt-2 text-xs text-flux-text-secondary">
-                  <span>{currentUser?.followerCount?.toLocaleString()} followers</span>
-                  <span>{currentUser?.followingCount?.toLocaleString()} following</span>
-                </div>
-              </motion.div>
-            )}
+              </div>
+            </div>
+            
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="w-full bg-flux-gradient hover:opacity-90 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create
+            </Button>
           </div>
-        </div>
+        )}
 
-        {/* Create Button */}
-        <div className="p-4 border-b border-flux-bg-tertiary">
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="w-full bg-flux-gradient hover:opacity-90 text-white font-semibold"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {!desktopSidebarCollapsed && 'Create Content'}
-          </Button>
-        </div>
+        {/* Collapsed Profile Section */}
+        {desktopSidebarCollapsed && currentUser && (
+          <div className="p-4 border-b border-flux-bg-tertiary flex justify-center">
+            <div 
+              onClick={() => navigate('/profile')}
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <Avatar 
+                src={currentUser.avatar} 
+                alt={currentUser.displayName}
+                size="sm"
+              />
+            </div>
+          </div>
+        )}
 
-        {/* Navigation */}
+        {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto">
           {/* Main Navigation */}
           <div className="p-4">
@@ -170,10 +188,10 @@ export const DesktopSidebar: React.FC = () => {
                   key={item.id}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => handleNavClick(item.id)}
+                  onClick={() => handleNavClick(item)}
                   className={cn(
                     "w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors text-left",
-                    activePage === (item.id as string)
+                    isActiveRoute(item.path)
                       ? "bg-flux-primary text-white"
                       : "text-flux-text-secondary hover:text-flux-text-primary hover:bg-flux-bg-tertiary"
                   )}
@@ -211,10 +229,10 @@ export const DesktopSidebar: React.FC = () => {
                   key={item.id}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => handleNavClick(item.id)}
+                  onClick={() => handleNavClick(item)}
                   className={cn(
                     "w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors text-left",
-                    activePage === item.id
+                    isActiveRoute(item.path)
                       ? "bg-flux-primary text-white"
                       : "text-flux-text-secondary hover:text-flux-text-primary hover:bg-flux-bg-tertiary"
                   )}
@@ -253,10 +271,10 @@ export const DesktopSidebar: React.FC = () => {
                 key={item.id}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => handleNavClick(item.id)}
+                onClick={() => handleNavClick(item)}
                 className={cn(
                   "w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors text-left",
-                  activePage === item.id
+                  isActiveRoute(item.path)
                     ? "bg-flux-primary text-white"
                     : "text-flux-text-secondary hover:text-flux-text-primary hover:bg-flux-bg-tertiary"
                 )}
@@ -331,7 +349,7 @@ export const DesktopSidebar: React.FC = () => {
             <Button
               variant="secondary"
               className="w-full justify-start"
-              onClick={() => handleNavClick('wallet')}
+              onClick={() => navigate('/wallet')}
             >
               <Wallet className="w-4 h-4 mr-2" />
               {!desktopSidebarCollapsed && 'Wallet'}

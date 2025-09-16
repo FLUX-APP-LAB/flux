@@ -6,6 +6,7 @@ import Result "mo:base/Result";
 import Nat "mo:base/Nat";
 import Text "mo:base/Text";
 import Int "mo:base/Int";
+import Iter "mo:base/Iter";
 
 module LiveStreamManager {
     // Types
@@ -627,13 +628,39 @@ module LiveStreamManager {
     };
 
     public func getLiveStreams(_category: ?StreamCategory, _language: ?Text, _limit: Nat) : [LiveStream] {
-        // Return currently live streams
-        []
+        // Get all streams and filter for live ones
+        let allStreams = Iter.toArray(streams.vals());
+        let liveStreams = Array.filter<LiveStream>(
+            allStreams,
+            func(stream: LiveStream) : Bool {
+                stream.status == #Live
+            }
+        );
+        
+        // Apply limit
+        if (liveStreams.size() <= _limit) {
+            liveStreams
+        } else {
+            Array.take(liveStreams, _limit)
+        }
     };
 
     public func getStreamsByUser(_userId: Principal, _limit: Nat) : [LiveStream] {
-        // Return user's streams
-        []
+        // Get all streams by user
+        let allStreams = Iter.toArray(streams.vals());
+        let userStreams = Array.filter<LiveStream>(
+            allStreams,
+            func(stream: LiveStream) : Bool {
+                stream.streamer == _userId
+            }
+        );
+        
+        // Apply limit
+        if (userStreams.size() <= _limit) {
+            userStreams
+        } else {
+            Array.take(userStreams, _limit)
+        }
     };
 
     public func getStreamChat(_streamId: Text, _limit: Nat, _offset: Nat) : [ChatMessage] {

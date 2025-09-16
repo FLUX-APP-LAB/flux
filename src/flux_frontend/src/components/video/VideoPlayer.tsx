@@ -8,6 +8,10 @@ import { CommentModal } from '../social/CommentModal';
 import { ShareModal } from '../social/ShareModal';
 import { Video } from '../../store/appStore';
 import { useAppStore } from '../../store/appStore';
+import { VideoService } from '../../lib/videoService';
+import { UserService } from '../../lib/userService';
+import { useWallet } from '../../hooks/useWallet';
+import { toast } from 'react-hot-toast';
 
 interface VideoPlayerProps {
   video: Video;
@@ -32,9 +36,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isFollowing, setIsFollowing] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [commentsCount, setCommentsCount] = useState(0);
+  const [isLiking, setIsLiking] = useState(false);
+  const [isFollowingUser, setIsFollowingUser] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const { toggleVideoLike } = useAppStore();
+  const { toggleVideoLike, toggleFollowUser, isFollowingUser: isFollowingUserInStore } = useAppStore();
+  const { newAuthActor } = useWallet();
 
   // Check if we have a valid video URL (including blob URLs)
   const hasValidVideoUrl = video.videoUrl && 
@@ -54,6 +63,57 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setIsPlaying(false);
     }
   }, [isActive, hasValidVideoUrl]);
+
+  // Sync like state with video prop
+  useEffect(() => {
+    console.log('Video like state updated:', { videoId: video.id, isLiked: video.isLiked, likes: video.likes });
+    setIsLiked(video.isLiked);
+    setLikes(video.likes);
+  }, [video.isLiked, video.likes]);
+
+  // Load comments count, like status, and follow status when video changes
+  useEffect(() => {
+    const loadVideoData = async () => {
+      if (!newAuthActor) return;
+
+      setIsLoadingData(true);
+      try {
+        const videoService = new VideoService(newAuthActor);
+        const userService = new UserService(newAuthActor);
+
+        // Load comments count
+        const count = await videoService.getVideoCommentsCount(video.id);
+        setCommentsCount(count);
+
+        // Check if user has liked this video
+        const hasLiked = await videoService.hasUserLikedVideo(video.id);
+        console.log('User has liked video:', hasLiked);
+        // Update the video in the store with the correct like status
+        if (hasLiked !== video.isLiked) {
+          toggleVideoLike(video.id);
+        }
+
+        // Check if user is following the video creator
+        const relationship = await userService.getUserRelationship(video.creator.id);
+        const isFollowing = relationship === 'Following' || relationship === 'Mutual' || relationship === 'Subscriber';
+        setIsFollowingUser(isFollowing);
+        
+        // Update store with follow status
+        if (isFollowing && !isFollowingUserInStore(video.creator.id)) {
+          toggleFollowUser(video.creator.id);
+        } else if (!isFollowing && isFollowingUserInStore(video.creator.id)) {
+          toggleFollowUser(video.creator.id);
+        }
+      } catch (error) {
+        console.error('Error loading video data:', error);
+        toast.error('Failed to load video data');
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    loadVideoData();
+  }, [video.id, video.creator.id, newAuthActor]);
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -86,14 +146,86 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     showControlsTemporarily();
   };
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    setLikes(prev => isLiked ? prev - 1 : prev + 1);
-    toggleVideoLike(video.id);
+  const handleLike = async () => {
+    if (!newAuthActor || isLiking) return;
+
+    console.log('Handling like for video:', video.id, 'Current like state:', isLiked);
+    setIsLiking(true);
+    try {
+      const videoService = new VideoService(newAuthActor);
+      let success = false;
+      
+      if (isLiked) {
+        // User wants to unlike
+        success = await videoService.unlikeVideo(video.id);
+        console.log('Unlike video result:', success);
+        if (success) {
+          toggleVideoLike(video.id);
+          toast.success('Video unliked');
+        } else {
+          toast.error('Failed to unlike video');
+        }
+      } else {
+        // User wants to like
+        success = await videoService.likeVideo(video.id);
+        console.log('Like video result:', success);
+        if (success) {
+          toggleVideoLike(video.id);
+          toast.success('Video liked!');
+        } else {
+          toast.error('Failed to like video');
+        }
+      }
+    } catch (error) {
+      console.error('Error liking/unliking video:', error);
+      toast.error('Failed to like video');
+    } finally {
+      setIsLiking(false);
+    }
   };
 
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing);
+  const handleFollow = async () => {
+    if (!newAuthActor) return;
+
+    try {
+      const userService = new UserService(newAuthActor);
+      let success = false;
+
+      if (isFollowingUser) {
+        success = await userService.unfollowUser(video.creator.id);
+        if (success) {
+          setIsFollowingUser(false);
+          toggleFollowUser(video.creator.id); // Update store
+          toast.success('Unfollowed user');
+        }
+      } else {
+        success = await userService.followUser(video.creator.id);
+        if (success) {
+          setIsFollowingUser(true);
+          toggleFollowUser(video.creator.id); // Update store
+          toast.success('Following user');
+        }
+      }
+
+      if (!success) {
+        toast.error(isFollowingUser ? 'Failed to unfollow user' : 'Failed to follow user');
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing user:', error);
+      toast.error('Failed to follow user');
+    }
+  };
+
+  const handleCommentAdded = async () => {
+    if (!newAuthActor) return;
+
+    try {
+      const videoService = new VideoService(newAuthActor);
+      const count = await videoService.getVideoCommentsCount(video.id);
+      setCommentsCount(count);
+    } catch (error) {
+      console.error('Error refreshing comment count:', error);
+    }
   };
 
   const showControlsTemporarily = () => {
@@ -254,10 +386,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </div>
               <Button 
                 size="sm" 
-                variant={isFollowing ? "secondary" : "primary"}
+                variant={isFollowingUser ? "secondary" : "primary"}
                 onClick={handleFollow}
+                disabled={!newAuthActor || isLoadingData}
               >
-                {isFollowing ? 'Following' : 'Follow'}
+                {isLoadingData ? 'Loading...' : (isFollowingUser ? 'Following' : 'Follow')}
               </Button>
             </div>
             <p className="text-white text-sm mb-1">{video.title}</p>
@@ -270,13 +403,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={handleLike}
-              className="flex flex-col items-center space-y-1"
+              disabled={!newAuthActor || isLiking}
+              className="flex flex-col items-center space-y-1 disabled:opacity-50"
             >
               <div className={cn(
                 "w-12 h-12 rounded-full flex items-center justify-center",
                 isLiked ? "bg-flux-accent-red" : "bg-black/30"
               )}>
-                <Heart className={cn("w-6 h-6", isLiked ? "text-white fill-current" : "text-white")} />
+                {isLiking ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Heart className={cn("w-6 h-6", isLiked ? "text-white fill-current" : "text-white")} />
+                )}
               </div>
               <span className="text-white text-xs">{formatNumber(likes)}</span>
             </motion.button>
@@ -290,7 +428,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               <div className="w-12 h-12 rounded-full bg-black/30 flex items-center justify-center">
                 <MessageCircle className="w-6 h-6 text-white" />
               </div>
-              <span className="text-white text-xs">128</span>
+              <span className="text-white text-xs">
+                {isLoadingData ? '...' : formatNumber(commentsCount)}
+              </span>
             </motion.button>
 
             <motion.button
@@ -334,6 +474,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         isOpen={showComments}
         onClose={() => setShowComments(false)}
         videoId={video.id}
+        onCommentAdded={handleCommentAdded}
       />
 
       <ShareModal

@@ -28,7 +28,7 @@
             // - Added https://via.placeholder.com for placeholder images  
             // - Added https://avataaars.io for avatar generation
             // - Added https://robohash.org for avatar generation
-            "Content-Security-Policy": "default-src 'self';script-src 'self';connect-src 'self' blob: data: http://localhost:* http://127.0.0.1:* https://icp0.io https://*.icp0.io https://icp-api.io;img-src 'self' data: blob: https://images.pexels.com https://*.pexels.com https://picsum.photos https://via.placeholder.com https://avataaars.io https://robohash.org https://api.dicebear.com;media-src 'self' blob: https://commondatastorage.googleapis.com;style-src * 'unsafe-inline';style-src-elem * 'unsafe-inline';font-src *;object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
+            "Content-Security-Policy": "default-src 'self';script-src 'self' 'unsafe-inline' 'sha256-ALaDkBo93Qax4JosMrWAFtKE7+rUENfP37WzspJnRXU=' 'sha256-ieoeWczDHkReVBsRBqaal5AFMlBtNjMzgwKvLqi/tSU=';script-src-elem 'self' 'unsafe-inline' 'sha256-ALaDkBo93Qax4JosMrWAFtKE7+rUENfP37WzspJnRXU=' 'sha256-ieoeWczDHkReVBsRBqaal5AFMlBtNjMzgwKvLqi/tSU=';connect-src 'self' blob: data: http://localhost:* http://127.0.0.1:* https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://icp-api.io https://raw.githack.com https://cdn.jsdelivr.net;img-src 'self' data: blob: https://images.pexels.com https://*.pexels.com https://picsum.photos https://via.placeholder.com https://avataaars.io https://robohash.org https://api.dicebear.com;media-src 'self' blob: https://commondatastorage.googleapis.com;style-src * 'unsafe-inline';style-src-elem * 'unsafe-inline';font-src *;object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
 
             // Security: The permissions policy enables camera and microphone for streaming functionality
             // Only includes recognized permissions policy features
@@ -57,4 +57,13 @@
         // Uncomment to redirect all requests from .raw.icp0.io to .icp0.io
         // "allow_raw_access": false
     },
+    {
+        "match": "**/*.hdr",
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Content-Type": "application/octet-stream"
+        }
+    }
 ]

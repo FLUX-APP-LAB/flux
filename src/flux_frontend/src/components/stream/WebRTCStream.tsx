@@ -157,7 +157,10 @@ export const WebRTCStream: React.FC<WebRTCStreamProps> = ({
         const playPromise = localVideoRef.current.play();
         if (playPromise !== undefined) {
           playPromise.catch(error => {
-            console.warn('Video play failed, but continuing:', error);
+            // Only log non-abort errors as warnings
+            if (error.name !== 'AbortError') {
+              console.warn('Video play failed, but continuing:', error);
+            }
             // Don't throw error here, as the stream is still valid
           });
         }
@@ -390,7 +393,10 @@ export const WebRTCStream: React.FC<WebRTCStreamProps> = ({
           const playPromise = localVideoRef.current.play();
           if (playPromise !== undefined) {
             playPromise.catch(error => {
-              console.warn('Video play failed after settings change:', error);
+              // Only log non-abort errors as warnings
+              if (error.name !== 'AbortError') {
+                console.warn('Video play failed after settings change:', error);
+              }
             });
           }
         }
@@ -430,9 +436,9 @@ export const WebRTCStream: React.FC<WebRTCStreamProps> = ({
   useEffect(() => {
     console.log('Mode changed to:', mode);
     
-    // Don't initialize multiple times
-    if (hasInitialized.current && mode === 'streamer') {
-      console.log('Already initialized for streamer mode, skipping...');
+    // Don't initialize multiple times for the same mode
+    if (hasInitialized.current && mode === 'streamer' && isStreaming) {
+      console.log('Already initialized and streaming for streamer mode, skipping...');
       return;
     }
     
@@ -456,7 +462,7 @@ export const WebRTCStream: React.FC<WebRTCStreamProps> = ({
       hasInitialized.current = false;
       console.log('Viewer mode: waiting for stream to be available');
     }
-  }, [mode]);
+  }, [mode, isStreaming, isInitializing, requestPermissions]);
 
   // Initialize on mount
   useEffect(() => {
@@ -488,7 +494,7 @@ export const WebRTCStream: React.FC<WebRTCStreamProps> = ({
     // Listen for force restart events
     const handleForceRestart = (event: CustomEvent) => {
       console.log('Force restart requested:', event.detail);
-      if (event.detail.mode === 'streamer' && mode === 'streamer') {
+      if (event.detail.mode === 'streamer' && mode === 'streamer' && !isStreaming) {
         hasInitialized.current = false;
         // Auto-start if specified
         if (event.detail.autoStart) {
@@ -515,7 +521,7 @@ export const WebRTCStream: React.FC<WebRTCStreamProps> = ({
       hasInitialized.current = false;
       permissionRequestInProgress.current = false;
     };
-  }, [mode, requestPermissions]);
+  }, [mode, requestPermissions, isStreaming]);
 
   // Handle video element events
   useEffect(() => {

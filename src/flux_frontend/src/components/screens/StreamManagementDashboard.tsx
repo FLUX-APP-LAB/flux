@@ -205,11 +205,23 @@ export const StreamManagementDashboard: React.FC = () => {
           navigate('/home');
         }, 2000);
       } else {
-        throw new Error('Failed to end stream');
+        throw new Error('Failed to end stream on backend');
       }
     } catch (error) {
       console.error('Error ending stream:', error);
-      toast.error('Failed to end stream. Please try again.');
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('endStream is not a function')) {
+          toast.error('Stream ending is not available. Please refresh the page.');
+        } else if (error.message.includes('Failed to end stream on backend')) {
+          toast.error('Backend failed to end stream. The stream may already be ended.');
+        } else {
+          toast.error(`Failed to end stream: ${error.message}`);
+        }
+      } else {
+        toast.error('Failed to end stream. Please try again.');
+      }
     } finally {
       setIsEnding(false);
     }

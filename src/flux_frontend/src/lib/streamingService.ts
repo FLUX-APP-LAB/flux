@@ -108,7 +108,7 @@ export class StreamingService {
 
   async stopStream(streamId: string): Promise<boolean> {
     try {
-      const result = await this.actor.stopStream(streamId);
+      const result = await this.actor.endStream(streamId);
       
       if ('ok' in result) {
         return true;

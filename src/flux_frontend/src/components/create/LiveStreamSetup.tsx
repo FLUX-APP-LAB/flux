@@ -118,8 +118,8 @@ export const LiveStreamSetup: React.FC<LiveStreamSetupProps> = ({
       // Small delay to ensure state is updated before navigation
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Navigate to the new stream page
-      navigate(`/stream/${streamId}`);
+      // Navigate to the stream management dashboard for creators
+      navigate(`/manage-stream/${streamId}`);
       onClose();
     } catch (error) {
       console.error('Error starting stream:', error);

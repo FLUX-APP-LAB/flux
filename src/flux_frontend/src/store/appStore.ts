@@ -47,6 +47,20 @@ export interface LiveStream {
   viewers: number;
   isLive: boolean;
   category: string;
+  // Optional properties for stream management
+  description?: string;
+  tags?: string[];
+  streamKey?: string;
+  shareUrl?: string;
+  startedAt?: Date | string; // Allow both Date and string for compatibility
+  streamUrl?: string;
+  chatEnabled?: boolean;
+  metrics?: {
+    peakViewers: number;
+    averageViewers: number;
+    totalViews: number;
+    engagement: number;
+  };
 }
 
 export interface ChatMessage {

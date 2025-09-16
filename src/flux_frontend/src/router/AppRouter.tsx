@@ -3,6 +3,7 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router
 import { HomeFeed } from '../components/screens/HomeFeed';
 import { DiscoverScreen } from '../components/screens/DiscoverScreen';
 import { StreamDashboard } from '../components/screens/StreamDashboard';
+import { StreamManagementDashboard } from '../components/screens/StreamManagementDashboard';
 import { StreamViewer } from '../components/screens/StreamViewer';
 import { LiveStreamList } from '../components/screens/LiveStreamList';
 import { UserProfile } from '../components/screens/UserProfile';
@@ -62,6 +63,7 @@ export const AppRouter: React.FC = () => {
             {/* Stream routes */}
             <Route path="streams" element={<LiveStreamList />} />
             <Route path="stream-dashboard" element={<StreamDashboard />} />
+            <Route path="manage-stream/:streamId" element={<StreamManagementDashboard />} />
           </Route>
           
           {/* Full-screen stream viewer without main layout */}

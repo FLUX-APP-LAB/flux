@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
@@ -70,9 +70,9 @@ export const StreamManagementDashboard: React.FC = () => {
     revenue: 0
   });
 
-  // Demo canister configuration
-  const demoCanisterId = 'rrkah-fqaaa-aaaaa-aaaaq-cai';
-  const demoIdlFactory = {
+  // Demo canister configuration - memoized to prevent re-renders
+  const demoCanisterId = useMemo(() => 'rrkah-fqaaa-aaaaa-aaaaq-cai', []);
+  const demoIdlFactory = useMemo(() => ({
     createActor: () => ({
       startGameStream: async () => ({ success: true, streamId: 'demo-stream-123' }),
       stopStream: async () => ({ success: true }),
@@ -85,7 +85,21 @@ export const StreamManagementDashboard: React.FC = () => {
       sendAnswer: async (answerData: any) => ({ ok: true }),
       sendIceCandidate: async (candidateData: any) => ({ ok: true })
     })
-  };
+  }), []);
+
+  // Helper function to calculate stream duration
+  const getStreamDuration = useCallback((startTime: Date | string | undefined): string => {
+    if (!startTime) return '00:00:00';
+    
+    const now = new Date();
+    const startDate = typeof startTime === 'string' ? new Date(startTime) : startTime;
+    const diff = now.getTime() - startDate.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }, []);
 
   // Find the current stream
   useEffect(() => {
@@ -108,21 +122,25 @@ export const StreamManagementDashboard: React.FC = () => {
     }
   }, [streamId, activeStreams, setCurrentStream]);
 
-  // Update stream duration every second
+  // Update stream duration every second - only update if stream is live
   useEffect(() => {
     if (!currentStream?.startedAt || !isStreamLive) return;
     
     const interval = setInterval(() => {
-      setStats(prev => ({
-        ...prev,
-        streamDuration: getStreamDuration(currentStream.startedAt)
-      }));
+      const newDuration = getStreamDuration(currentStream.startedAt);
+      setStats(prev => {
+        // Only update if duration actually changed to prevent unnecessary re-renders
+        if (prev.streamDuration !== newDuration) {
+          return { ...prev, streamDuration: newDuration };
+        }
+        return prev;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentStream?.startedAt, isStreamLive]);
+  }, [currentStream?.startedAt, isStreamLive, getStreamDuration]);
 
-  // Simulate viewer count updates
+  // Simulate viewer count updates - reduced frequency to prevent excessive re-renders
   useEffect(() => {
     if (!isStreamLive) return;
     
@@ -130,30 +148,23 @@ export const StreamManagementDashboard: React.FC = () => {
       setStats(prev => {
         const newViewers = Math.max(0, prev.currentViewers + Math.floor(Math.random() * 10 - 4));
         const newPeak = Math.max(prev.peakViewers, newViewers);
-        return {
-          ...prev,
-          currentViewers: newViewers,
-          peakViewers: newPeak,
-          totalViews: prev.totalViews + Math.floor(Math.random() * 3)
-        };
+        const viewsIncrement = Math.floor(Math.random() * 3);
+        
+        // Only update if values actually changed
+        if (newViewers !== prev.currentViewers || newPeak !== prev.peakViewers || viewsIncrement > 0) {
+          return {
+            ...prev,
+            currentViewers: newViewers,
+            peakViewers: newPeak,
+            totalViews: prev.totalViews + viewsIncrement
+          };
+        }
+        return prev;
       });
-    }, 3000);
+    }, 5000); // Increased from 3000 to 5000 to reduce frequency
 
     return () => clearInterval(interval);
   }, [isStreamLive]);
-
-  const getStreamDuration = (startTime: Date | string | undefined): string => {
-    if (!startTime) return '00:00:00';
-    
-    const now = new Date();
-    const startDate = typeof startTime === 'string' ? new Date(startTime) : startTime;
-    const diff = now.getTime() - startDate.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
 
   const handleEndStream = async () => {
     if (!streamId || !newAuthActor) {
@@ -204,22 +215,40 @@ export const StreamManagementDashboard: React.FC = () => {
     }
   };
 
-  const copyStreamUrl = () => {
+  const copyStreamUrl = useCallback(() => {
     if (currentStream?.shareUrl) {
       navigator.clipboard.writeText(currentStream.shareUrl);
       toast.success('Stream URL copied to clipboard!');
     }
-  };
+  }, [currentStream?.shareUrl]);
 
-  const handleStreamStart = (stream: MediaStream) => {
+  const handleStreamStart = useCallback((stream: MediaStream) => {
     console.log('Stream started in management dashboard:', stream.getTracks());
     setIsConnected(true);
-  };
+  }, []);
 
-  const handleStreamEnd = () => {
+  const handleStreamEnd = useCallback(() => {
     console.log('Stream ended in management dashboard');
     setIsConnected(false);
-  };
+  }, []);
+
+  // Memoized WebRTC component to prevent unnecessary re-renders
+  const MemoizedWebRTCStream = useMemo(() => {
+    if (!currentStream) return null;
+    
+    return (
+      <WebRTCStream
+        streamId={currentStream.id}
+        isStreamer={true}
+        mode="streamer"
+        canisterId={demoCanisterId}
+        idlFactory={demoIdlFactory}
+        onStreamStart={handleStreamStart}
+        onStreamEnd={handleStreamEnd}
+        className="w-full h-full"
+      />
+    );
+  }, [currentStream?.id, demoCanisterId, demoIdlFactory, handleStreamStart, handleStreamEnd]);
 
   if (!currentStream) {
     return (
@@ -332,16 +361,7 @@ export const StreamManagementDashboard: React.FC = () => {
             {/* Stream Preview */}
             <div className="bg-flux-bg-secondary rounded-xl overflow-hidden">
               <div className="aspect-video relative">
-                <WebRTCStream
-                  streamId={currentStream.id}
-                  isStreamer={true}
-                  mode="streamer"
-                  canisterId={demoCanisterId}
-                  idlFactory={demoIdlFactory}
-                  onStreamStart={handleStreamStart}
-                  onStreamEnd={handleStreamEnd}
-                  className="w-full h-full"
-                />
+                {MemoizedWebRTCStream}
                 
                 {/* Stream Controls Overlay */}
                 <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">

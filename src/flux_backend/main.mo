@@ -1104,7 +1104,7 @@ persistent actor UserManager {
                     case (?user) {
                         let currentTotalLikes = user.stats.totalLikes;
                         let newTotalLikes = if (currentTotalLikes > 0) { 
-                            currentTotalLikes - 1
+                            Nat.sub(currentTotalLikes, 1)
                         } else { 0 };
                         
                         let updatedStats = {

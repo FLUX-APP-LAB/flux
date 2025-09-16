@@ -126,31 +126,25 @@ export const StreamViewer: React.FC = () => {
     
     try {
       // Convert LiveStream to FrontendStream format for sharing
-      const frontendStream = {
+            const frontendStream = {
         id: currentStream.id,
         title: currentStream.title,
-        description: '', // LiveStream doesn't have description
+        description: currentStream.title, // Using title as description since LiveStream doesn't have description
         thumbnail: currentStream.thumbnail,
         creator: {
           id: currentStream.creator.id,
           username: currentStream.creator.username,
           displayName: currentStream.creator.displayName,
           avatar: currentStream.creator.avatar,
-          isLiveStreaming: currentStream.creator.isLiveStreaming || false,
+          isVerified: false
         },
         viewers: currentStream.viewers,
         isLive: currentStream.isLive,
         category: currentStream.category,
+        tags: [], // Default empty array
+        startedAt: new Date().toISOString(),
         streamUrl: '', // Not available in LiveStream
-        streamKey: '', // Not available in LiveStream
-        shareUrl: `${window.location.origin}/stream/${currentStream.id}`,
-        startedAt: new Date(),
-        metrics: {
-          peakViewers: currentStream.viewers,
-          averageViewers: currentStream.viewers,
-          totalViews: currentStream.viewers,
-          engagement: 0,
-        }
+        chatEnabled: true // Default to true
       };
       
       const success = await streamingService.shareStream(frontendStream);

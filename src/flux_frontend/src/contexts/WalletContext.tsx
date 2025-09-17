@@ -287,7 +287,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         // Use local development canister ID
         canisterId = import.meta.env.CANISTER_ID_FLUX_BACKEND || 
                     import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 
-                    'uxrrr-q7777-77774-qaaaq-cai'; // Local development fallback
+                    'vpyes-67777-77774-qaaeq-cai'; // Local development fallback
       }
       
       console.log('Creating actor with:', {

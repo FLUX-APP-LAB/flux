@@ -16,6 +16,8 @@ import { NotificationsScreen } from '../components/screens/NotificationsScreen';
 import { SettingsScreen } from '../components/screens/SettingsScreen';
 import { LandingPage } from '../components/auth/LandingPage';
 import { SignupPage } from '../components/auth/SignupPage';
+import { LiveStreamDemo } from '../components/stream/LiveStreamDemo';
+import { LiveStreamPage } from '../components/stream/LiveStreamPage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { MainLayout } from '../components/layouts/MainLayout';
 
@@ -63,6 +65,8 @@ export const AppRouter: React.FC = () => {
             {/* Stream routes */}
             <Route path="streams" element={<LiveStreamList />} />
             <Route path="stream-dashboard" element={<StreamDashboard />} />
+            <Route path="live-stream" element={<LiveStreamPage />} />
+            <Route path="go-live" element={<LiveStreamPage />} />
             <Route path="manage-stream/:streamId" element={<StreamManagementDashboard />} />
           </Route>
           

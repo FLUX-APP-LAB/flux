@@ -52,6 +52,7 @@ export const DesktopSidebar: React.FC = () => {
     { id: 'discover', path: '/discover', icon: Search, label: 'Discover', badge: null },
     { id: 'following', path: '/home', icon: Users, label: 'Following', badge: '12' },
     { id: 'streams', path: '/streams', icon: Radio, label: 'Live Streams', badge: null },
+    { id: 'stream-dashboard', path: '/go-live', icon: Zap, label: 'Go Live', badge: null },
   ] as const;
 
   const secondaryNavItems = [

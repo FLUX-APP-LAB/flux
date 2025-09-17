@@ -196,6 +196,9 @@ persistent actor UserManager {
     // LiveStream Manager Instance
     private transient var liveStreamManager = LiveStreamManager.LiveStreamManager();
     
+    // Initialize demo streams - commented out to avoid principal validation issues
+    // ignore liveStreamManager.initializeDemoStreams();
+    
     // Token Manager Instance
     private transient var tokenManager = TokenManager.TokenManager();
     

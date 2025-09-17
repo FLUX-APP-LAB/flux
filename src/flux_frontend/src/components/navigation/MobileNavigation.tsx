@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Plus, Users, User } from 'lucide-react';
+import { Home, Search, Plus, Users, User, Zap } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { CreateContentModal } from '../create/CreateContentModal';
 
@@ -13,8 +13,8 @@ export const MobileNavigation: React.FC = () => {
   const navItems = [
     { id: 'home', path: '/home', icon: Home, label: 'Home' },
     { id: 'discover', path: '/discover', icon: Search, label: 'Discover' },
+    { id: 'stream-dashboard', path: '/go-live', icon: Zap, label: 'Go Live' },
     { id: 'create', path: '', icon: Plus, label: 'Create', isCreate: true },
-    { id: 'following', path: '/home', icon: Users, label: 'Following' },
     { id: 'profile', path: '/profile', icon: User, label: 'Profile' },
   ];
 

@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Users, Eye, Calendar, Clock } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
+import { useWallet } from '../../hooks/useWallet';
+import { StreamingService } from '../../lib/streamingService';
+import toast from 'react-hot-toast';
 
 interface LiveStream {
   id: string;
@@ -20,6 +23,7 @@ interface LiveStream {
 
 export const LiveStreamList: React.FC = () => {
   const { currentUser } = useAppStore();
+  const { newAuthActor } = useWallet();
   const [streams, setStreams] = useState<LiveStream[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'following' | 'category'>('all');
@@ -75,17 +79,113 @@ export const LiveStreamList: React.FC = () => {
   ];
 
   useEffect(() => {
-    // Simulate loading streams
+    // Fetch live streams from backend
     const loadStreams = async () => {
       setLoading(true);
-      // In a real app, this would fetch from the backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setStreams(mockStreams);
-      setLoading(false);
+      
+      if (!newAuthActor) {
+        console.log('No authenticated actor available, using mock data');
+        // Use mock data when not authenticated
+        await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay to simulate loading
+        setStreams(mockStreams);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const streamingService = new StreamingService(newAuthActor);
+        
+        // Fetch all live streams (no category filter, limit of 50)
+        const fetchedStreams = await streamingService.getLiveStreams(undefined, undefined, 50);
+        
+        // Console log the fetched streams
+        console.log('Fetched live streams from backend:', fetchedStreams);
+        
+        // Transform to match our interface
+        const transformedStreams: LiveStream[] = fetchedStreams.map(stream => ({
+          id: stream.id,
+          title: stream.title,
+          streamer: {
+            id: stream.creator.id,
+            username: stream.creator.username,
+            avatar: stream.creator.avatar || '/default-avatar.png'
+          },
+          thumbnail: stream.thumbnail || '/demo1.png',
+          viewerCount: stream.viewers || 0,
+          category: stream.category || 'General',
+          startTime: stream.startedAt || new Date().toISOString(),
+          isLive: stream.isLive,
+          tags: stream.tags || []
+        }));
+        
+        console.log('Transformed streams for frontend:', transformedStreams);
+        setStreams(transformedStreams);
+        
+      } catch (error) {
+        console.error('Error fetching live streams:', error);
+        toast.error('Failed to load live streams');
+        
+        // Fallback to mock data in case of error
+        setStreams(mockStreams);
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadStreams();
-  }, []);
+  }, [newAuthActor]);
+
+  // Function to fetch streams with category filter
+  const fetchStreamsByCategory = async (category?: string) => {
+    if (!newAuthActor) {
+      console.log('No authenticated actor available for category filtering, using mock data');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const streamingService = new StreamingService(newAuthActor);
+      
+      // Fetch streams with category filter
+      const fetchedStreams = await streamingService.getLiveStreams(category, undefined, 50);
+      
+      console.log(`Fetched live streams for category "${category || 'all'}":`, fetchedStreams);
+      
+      // Transform to match our interface
+      const transformedStreams: LiveStream[] = fetchedStreams.map(stream => ({
+        id: stream.id,
+        title: stream.title,
+        streamer: {
+          id: stream.creator.id,
+          username: stream.creator.username,
+          avatar: stream.creator.avatar || '/default-avatar.png'
+        },
+        thumbnail: stream.thumbnail || '/demo1.png',
+        viewerCount: stream.viewers || 0,
+        category: stream.category || 'General',
+        startTime: stream.startedAt || new Date().toISOString(),
+        isLive: stream.isLive,
+        tags: stream.tags || []
+      }));
+      
+      setStreams(transformedStreams);
+      
+    } catch (error) {
+      console.error('Error fetching streams by category:', error);
+      toast.error('Failed to filter streams by category');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Re-fetch streams when category filter changes
+  useEffect(() => {
+    if (filter === 'category' && selectedCategory && newAuthActor) {
+      fetchStreamsByCategory(selectedCategory);
+    } else if (filter === 'all' && newAuthActor) {
+      fetchStreamsByCategory(); // Fetch all streams
+    }
+  }, [filter, selectedCategory, newAuthActor]);
 
   const filteredStreams = streams.filter(stream => {
     if (filter === 'following') {

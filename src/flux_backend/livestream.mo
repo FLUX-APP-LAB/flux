@@ -219,6 +219,169 @@ module LiveStreamManager {
         private var bannedUsers = HashMap.HashMap<Text, Int>(0, Text.equal, Text.hash);
         private var chatSettings = HashMap.HashMap<Principal, ChatSettings>(0, Principal.equal, Principal.hash);
 
+        // Initialize with demo streams
+        public func initializeDemoStreams() {
+            let currentTime = Time.now();
+            
+            // Demo stream 1
+            let demoStream1: LiveStream = {
+                id = "demo_stream_1";
+                streamer = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+                title = "Epic Gaming Session - Come Join!";
+                description = "Playing the latest indie games and taking viewer suggestions";
+                category = #Gaming;
+                tags = ["fps", "competitive", "multiplayer"];
+                language = "en";
+                status = #Live;
+                viewers = [];
+                chatMessages = [];
+                moderators = [];
+                subscriberOnlyMode = false;
+                followerOnlyMode = false;
+                slowModeInterval = 0;
+                emoteOnlyMode = false;
+                maturityRating = "General";
+                streamUrl = "rtmp://streaming.icp-social.com/live/demo1";
+                thumbnailUrl = ?"/demo1.png";
+                streamKey = "demo_key_1";
+                quality = #P720;
+                bitrate = 5000;
+                frameRate = 30;
+                alerts = [];
+                donations = [];
+                raids = [];
+                hosts = [];
+                schedule = null;
+                metrics = {
+                    peakViewers = 1250;
+                    averageViewers = 850;
+                    totalViews = 5000;
+                    chatMessages = 150;
+                    newFollowers = 25;
+                    newSubscribers = 5;
+                    donations = 0;
+                    bitsReceived = 500;
+                    raidsSent = 0;
+                    raidsReceived = 1;
+                    streamDuration = 7200; // 2 hours
+                    engagement = 0.85;
+                };
+                isRecording = false;
+                recordingUrl = null;
+                startTime = currentTime - 7200000000000; // 2 hours ago
+                endTime = null;
+                createdAt = currentTime - 86400000000000; // 1 day ago
+                updatedAt = currentTime;
+            };
+
+            // Demo stream 2
+            let demoStream2: LiveStream = {
+                id = "demo_stream_2";
+                streamer = Principal.fromText("rdmx6-jaaaa-aaaah-qca7q-cai");
+                title = "Cooking Show Live!";
+                description = "Making delicious pasta from scratch";
+                category = #Cooking;
+                tags = ["cooking", "recipe", "live"];
+                language = "en";
+                status = #Live;
+                viewers = [];
+                chatMessages = [];
+                moderators = [];
+                subscriberOnlyMode = false;
+                followerOnlyMode = false;
+                slowModeInterval = 0;
+                emoteOnlyMode = false;
+                maturityRating = "General";
+                streamUrl = "rtmp://streaming.icp-social.com/live/demo2";
+                thumbnailUrl = ?"/demo2.png";
+                streamKey = "demo_key_2";
+                quality = #P1080;
+                bitrate = 6000;
+                frameRate = 30;
+                alerts = [];
+                donations = [];
+                raids = [];
+                hosts = [];
+                schedule = null;
+                metrics = {
+                    peakViewers = 850;
+                    averageViewers = 600;
+                    totalViews = 3200;
+                    chatMessages = 89;
+                    newFollowers = 15;
+                    newSubscribers = 3;
+                    donations = 2;
+                    bitsReceived = 200;
+                    raidsSent = 0;
+                    raidsReceived = 0;
+                    streamDuration = 3600; // 1 hour
+                    engagement = 0.75;
+                };
+                isRecording = true;
+                recordingUrl = ?"/recordings/cooking_session_1.mp4";
+                startTime = currentTime - 3600000000000; // 1 hour ago
+                endTime = null;
+                createdAt = currentTime - 43200000000000; // 12 hours ago
+                updatedAt = currentTime;
+            };
+
+            // Demo stream 3
+            let demoStream3: LiveStream = {
+                id = "demo_stream_3";
+                streamer = Principal.fromText("rno2w-sqaaa-aaaah-qcazq-cai");
+                title = "Music Production Tutorial";
+                description = "Creating beats and learning music production";
+                category = #Music;
+                tags = ["music", "tutorial", "production"];
+                language = "en";
+                status = #Live;
+                viewers = [];
+                chatMessages = [];
+                moderators = [];
+                subscriberOnlyMode = false;
+                followerOnlyMode = false;
+                slowModeInterval = 0;
+                emoteOnlyMode = false;
+                maturityRating = "General";
+                streamUrl = "rtmp://streaming.icp-social.com/live/demo3";
+                thumbnailUrl = ?"/demo3.png";
+                streamKey = "demo_key_3";
+                quality = #P720;
+                bitrate = 4500;
+                frameRate = 30;
+                alerts = [];
+                donations = [];
+                raids = [];
+                hosts = [];
+                schedule = null;
+                metrics = {
+                    peakViewers = 420;
+                    averageViewers = 350;
+                    totalViews = 1800;
+                    chatMessages = 45;
+                    newFollowers = 8;
+                    newSubscribers = 2;
+                    donations = 1;
+                    bitsReceived = 100;
+                    raidsSent = 0;
+                    raidsReceived = 0;
+                    streamDuration = 5400; // 1.5 hours
+                    engagement = 0.65;
+                };
+                isRecording = false;
+                recordingUrl = null;
+                startTime = currentTime - 5400000000000; // 1.5 hours ago
+                endTime = null;
+                createdAt = currentTime - 21600000000000; // 6 hours ago
+                updatedAt = currentTime;
+            };
+
+            // Add demo streams to the HashMap
+            streams.put("demo_stream_1", demoStream1);
+            streams.put("demo_stream_2", demoStream2);
+            streams.put("demo_stream_3", demoStream3);
+        };
+
         // Core Streaming Functions
         public func createStream(
             caller: Principal,

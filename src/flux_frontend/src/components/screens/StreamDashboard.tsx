@@ -1,36 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, MessageSquare, Users, Settings, Monitor, Video } from 'lucide-react';
-import { WebRTCStream } from '../stream/WebRTCStream';
+import { LiveStreamDemo } from '../stream/LiveStreamDemo';
 import { StreamChat } from '../stream/StreamChat';
 import { useAppStore } from '../../store/appStore';
+import { useWallet } from '../../hooks/useWallet';
 import { generateMockData } from '../../lib/utils';
 import { Button } from '../ui/Button';
 
 export const StreamDashboard: React.FC = () => {
   const { activeStreams, currentStream, setActiveStreams, setCurrentStream, setActivePage, currentUser } = useAppStore();
+  const { newAuthActor, isAuthenticated } = useWallet();
   const [chatVisible, setChatVisible] = useState(true);
   const [mode, setMode] = useState<'viewer' | 'streamer'>('viewer');
   const [hasInitialized, setHasInitialized] = useState(false);
-
-  // Demo canister configuration - in production, this would come from environment or props
-  const demoCanisterId = 'rrkah-fqaaa-aaaaa-aaaaq-cai';
-  const demoIdlFactory = {
-    // Mock IDL factory for demo purposes
-    createActor: () => ({
-      startGameStream: async () => ({ success: true, streamId: 'demo-stream-123' }),
-      stopStream: async () => ({ success: true }),
-      getActiveStreams: async () => [],
-      watchStream: async () => ({ success: true }),
-      leaveStream: async () => ({ success: true }),
-      // WebRTC specific methods
-      createWebRTCStream: async (streamData: any) => ({ ok: streamData }),
-      joinStream: async (streamId: string, offer: string) => ({ ok: true }),
-      getPendingViewers: async (streamId: string) => ({ ok: [] }),
-      sendAnswer: async (answerData: any) => ({ ok: true }),
-      sendIceCandidate: async (candidateData: any) => ({ ok: true })
-    })
-  };
 
   useEffect(() => {
     const { mockStreams } = generateMockData();
@@ -108,16 +91,16 @@ export const StreamDashboard: React.FC = () => {
     <div className="h-screen bg-flux-bg-primary flex">
       {/* Stream Player */}
       <div className="flex-1 relative">
-        <WebRTCStream
-          streamId={currentStream.id}
-          isStreamer={mode === 'streamer'}
-          mode={mode}
-          canisterId={demoCanisterId}
-          idlFactory={demoIdlFactory}
-          onStreamStart={handleStreamStart}
-          onStreamEnd={handleStreamEnd}
-          className="w-full h-full"
-        />
+        {newAuthActor && isAuthenticated ? (
+          <LiveStreamDemo
+            actor={newAuthActor}
+            className="w-full h-full"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <p className="text-gray-600">Please authenticate to access streaming features</p>
+          </div>
+        )}
 
         {/* Mobile Chat Toggle */}
         <div className="absolute top-4 right-4 md:hidden z-10">

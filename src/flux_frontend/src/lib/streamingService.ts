@@ -124,10 +124,12 @@ export class StreamingService {
 
   async getLiveStreams(category?: string, language?: string, limit: number = 50): Promise<FrontendStream[]> {
     try {
-      // Convert category to variant type if provided
-      const categoryVariant = category ? this.getCategoryVariant(category) : null;
+      // Convert category to variant type if provided, use empty array for null (Motoko optional)
+      const categoryVariant = category ? this.getCategoryVariant(category) : [];
+      // Use empty array for null language as well (Motoko optional text)
+      const languageParam = language || [];
       
-      const result = await this.actor.getLiveStreams(categoryVariant, language || null, limit);
+      const result = await this.actor.getLiveStreams(categoryVariant, languageParam, limit);
       
       // Backend returns array directly, not wrapped in Result
       if (Array.isArray(result)) {

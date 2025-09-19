@@ -75,15 +75,8 @@ export const LandingPage: React.FC = () => {
     try {
       console.log('Starting wallet connection...');
       await login();
-      console.log('Principal:', currentUser?.principal);
-      // Navigation will be handled by the useEffect above when authentication completes
-        if (currentUser && isAuthenticated) {
-          console.log('User authenticated with profile, redirecting to home...');
-          navigate('/home', { replace: true });
-        } else if (!currentUser) {
-          console.log('No user profile found, redirecting to signup...');
-          navigate('/signup', { replace: true });
-        }
+      // Don't navigate here - let the AppRouter handle navigation
+      // based on the updated authentication state
     } catch (error) {
       console.error('Wallet connection error:', error);
       toast.error('Failed to connect wallet. Please try again.');

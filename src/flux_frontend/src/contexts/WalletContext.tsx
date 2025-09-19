@@ -150,32 +150,16 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   async function initAuth() {
     try {
-      setIsInitializing(true);
-      setAuthError(null);
+      console.log('Initializing authentication...');
       
-      console.log('Environment detection:', {
-        network,
-        isLocal,
-        isMainnet,
-        hostname: window.location.hostname,
-        identityProvider,
-        DFX_NETWORK: import.meta.env.DFX_NETWORK,
-        VITE_DFX_NETWORK: import.meta.env.VITE_DFX_NETWORK,
-        CANISTER_ID_INTERNET_IDENTITY: import.meta.env.CANISTER_ID_INTERNET_IDENTITY,
-        VITE_CANISTER_ID_INTERNET_IDENTITY: import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY,
-        CANISTER_ID_FLUX_BACKEND: import.meta.env.CANISTER_ID_FLUX_BACKEND,
-        VITE_CANISTER_ID_FLUX_BACKEND: import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND
-      });
-      
-      console.log('Initializing AuthClient...', { 
-        isLocal, 
-        identityProvider,
-        network 
-      });
+      // Check saved auth state first
+      const savedAuthState = authUtils.getAuthState();
+      console.log('Saved auth state:', savedAuthState);
       
       const client = await AuthClient.create(defaultOptions.createOptions);
       setAuthClient(client);
       
+      // Check if user is authenticated
       const isAuthenticated = await client.isAuthenticated();
       console.log('Authentication status:', isAuthenticated);
       
@@ -183,6 +167,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         // Validate existing identity before proceeding
         const existingIdentity = await client.getIdentity();
         if (validateIdentity(existingIdentity)) {
+          console.log('Restoring authenticated session...');
           await handleAuthenticated(client);
         } else {
           console.warn('Existing identity is invalid, clearing auth state');
@@ -190,11 +175,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
           authUtils.clearAuthState();
         }
       } else {
-        // Check if we should attempt auto-auth based on saved state
-        const shouldAutoAuth = authUtils.shouldAttemptAutoAuth();
-        if (shouldAutoAuth) {
-          console.log('Attempting auto-authentication based on saved state...');
-          // Don't auto-login, just clear the invalid state
+        // If we have saved state but no active session, clear it
+        if (savedAuthState?.hasValidSession) {
+          console.log('Clearing stale auth state');
           authUtils.clearAuthState();
         }
       }

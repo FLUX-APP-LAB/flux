@@ -1,25 +1,47 @@
 import { useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AppRouter } from './router/AppRouter';
-import { WalletProvider } from './contexts/WalletContext';
+import { WalletProvider, useWallet } from './contexts/WalletContext';
 import { useAppStore } from './store/appStore';
+
+// Loading component for initialization
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-flux-bg-primary flex items-center justify-center">
+      <div className="text-center">
+        <div className="loading-logo mb-4">FLUX</div>
+        <div className="text-flux-text-secondary">Initializing...</div>
+      </div>
+    </div>
+  );
+}
 
 // Theme effect component
 function ThemeEffect() {
   const { theme } = useAppStore();
 
   useEffect(() => {
-    // Apply theme to document
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
   return null;
 }
 
-// Main App component with WalletProvider
-function App() {
+// Component that handles auth initialization - MUST be inside WalletProvider
+function AuthInitializer() {
+  const { isInitializing } = useWallet(); // This hook is now available
+  
+  if (isInitializing) {
+    return <LoadingScreen />;
+  }
+  
+  return <AppContent />;
+}
+
+// App content that waits for auth initialization
+function AppContent() {
   return (
-    <WalletProvider>
+    <>
       <ThemeEffect />
       <AppRouter />
       <Toaster
@@ -33,6 +55,15 @@ function App() {
           },
         }}
       />
+    </>
+  );
+}
+
+// Main App component
+function App() {
+  return (
+    <WalletProvider>
+      <AuthInitializer />
     </WalletProvider>
   );
 }

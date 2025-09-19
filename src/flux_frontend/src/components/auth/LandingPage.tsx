@@ -68,22 +68,22 @@ export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, authError } = useWallet();
   const { isAuthenticated, currentUser } = useAppStore();
-
-  // Redirect to home if user is already authenticated with profile
-  useEffect(() => {
-    if (isAuthenticated && currentUser) {
-      console.log('User authenticated with profile, redirecting to home...');
-      navigate('/home', { replace: true });
-    }
-  }, [isAuthenticated, currentUser, navigate]);
+  
 
   const connectWallet = async () => {
     setIsLoading(true);
     try {
       console.log('Starting wallet connection...');
       await login();
-      toast.success('Wallet connected!');
+      console.log('Principal:', currentUser?.principal);
       // Navigation will be handled by the useEffect above when authentication completes
+        if (currentUser && isAuthenticated) {
+          console.log('User authenticated with profile, redirecting to home...');
+          navigate('/home', { replace: true });
+        } else if (!currentUser) {
+          console.log('No user profile found, redirecting to signup...');
+          navigate('/signup', { replace: true });
+        }
     } catch (error) {
       console.error('Wallet connection error:', error);
       toast.error('Failed to connect wallet. Please try again.');
@@ -100,6 +100,7 @@ export const LandingPage: React.FC = () => {
   }, [authError]);
 
   // No local signup routing; App handles view switching
+  
 
   const features = [
     {

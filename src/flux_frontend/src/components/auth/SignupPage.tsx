@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -39,7 +38,6 @@ interface ValidationErrors {
 }
 
 export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
-  const navigate = useNavigate();
   const { newAuthActor, getUser, authError } = useWallet();
   const [formData, setFormData] = useState<FormData>({
     username: '',
@@ -318,9 +316,6 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
         
         setAuthenticated(true);
         toast.success('Welcome to FLUX! Your account has been created successfully.');
-        
-        // Redirect to home page after successful signup
-        navigate('/home', { replace: true });
         
       } catch (error) {
         console.error('Error creating user profile:', error);

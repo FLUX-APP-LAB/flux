@@ -91,7 +91,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   
   const identityProvider = isMainnet || (!isLocal && network !== 'local')
     ? 'https://identity.ic0.app' 
-    : `http://${import.meta.env.CANISTER_ID_INTERNET_IDENTITY || import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY }.localhost:4943`;
+    : `http://${import.meta.env.CANISTER_ID_INTERNET_IDENTITY || import.meta.env.VITE_CANISTER_ID_INTERNET_IDENTITY || 'uzt4z-lp777-77774-qaabq-cai'}.localhost:4943`;
 
   const defaultOptions = {
     createOptions: {
@@ -281,11 +281,13 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       if (isMainnet || (!isLocal && network !== 'local')) {
         // Use mainnet canister ID - try multiple environment variable sources
         canisterId = import.meta.env.CANISTER_ID_FLUX_BACKEND || 
-                    import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND ; // Hardcoded mainnet canister ID as final fallback
+                    import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 
+                    'rhgnb-siaaa-aaaau-abyla-cai'; // Hardcoded mainnet canister ID as final fallback
       } else {
         // Use local development canister ID
         canisterId = import.meta.env.CANISTER_ID_FLUX_BACKEND || 
-                    import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND ; // Local development fallback
+                    import.meta.env.VITE_CANISTER_ID_FLUX_BACKEND || 
+                    'vpyes-67777-77774-qaaeq-cai'; // Local development fallback
       }
       
       console.log('Creating actor with:', {

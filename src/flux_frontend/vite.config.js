@@ -3,10 +3,8 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import environment from 'vite-plugin-environment';
 import dotenv from 'dotenv';
-import path from 'path';
 
-// Load environment variables from the root directory
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: '../../.env' });
 
 export default defineConfig({
   build: {
@@ -41,15 +39,7 @@ export default defineConfig({
     react(),
     environment("all", { prefix: "CANISTER_" }),
     environment("all", { prefix: "DFX_" }),
-    environment("all", { prefix: "VITE_" }),
   ],
-  define: {
-    // Explicitly define environment variables for client access
-    'import.meta.env.CANISTER_ID_FLUX_BACKEND': JSON.stringify(process.env.CANISTER_ID_FLUX_BACKEND),
-    'import.meta.env.CANISTER_ID_INTERNET_IDENTITY': JSON.stringify(process.env.CANISTER_ID_INTERNET_IDENTITY),
-    'import.meta.env.CANISTER_ID_FLUX_FRONTEND': JSON.stringify(process.env.CANISTER_ID_FLUX_FRONTEND),
-    'import.meta.env.DFX_NETWORK': JSON.stringify(process.env.DFX_NETWORK),
-  },
   resolve: {
     alias: [
       {

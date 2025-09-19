@@ -55,10 +55,10 @@ const Hero3D: React.FC = () => {
         {useLocalHdri ? (
           <Environment files="/hdri/potsdamer_platz_1k.hdr" />
         ) : (
-          <Environment preset="city" />
+          <Environment preset="studio" />
         )}
       </Suspense>
-      <OrbitControls enablePan={false} enableZoom={false} autoRotate autoRotateSpeed={0.6} />
+      <OrbitControls enablePan={false} enableZoom={false} autoRotate autoRotateSpeed={0.8} />
     </Canvas>
   );
 };
@@ -69,11 +69,14 @@ export const LandingPage: React.FC = () => {
   const { login, authError } = useWallet();
   const { isAuthenticated, currentUser } = useAppStore();
 
-  // Redirect to home if user is already authenticated with profile
+  // Handle routing based on authentication state
   useEffect(() => {
     if (isAuthenticated && currentUser) {
       console.log('User authenticated with profile, redirecting to home...');
       navigate('/home', { replace: true });
+    } else if (isAuthenticated && !currentUser) {
+      console.log('User authenticated but no profile exists, redirecting to signup...');
+      navigate('/signup', { replace: true });
     }
   }, [isAuthenticated, currentUser, navigate]);
 

@@ -33,13 +33,74 @@ export interface FrontendUser {
 }
 
 export class UserService {
-  constructor(private actor: ActorSubclass<any>) {}
+  private actor: ActorSubclass<any>;
+
+  constructor(actor: ActorSubclass<any>) {
+    this.actor = actor;
+  }
+
+  async getUserProfile(userId: string) {
+    try {
+      const result = await this.actor.getUserProfile(userId);
+      return result;
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      throw error;
+    }
+  }
+
+  async updateUserProfile(userId: string, profileData: any) {
+    try {
+      const result = await this.actor.updateUserProfile(userId, profileData);
+      return result;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      throw error;
+    }
+  }
+
+  async isFollowing(followeeId: string): Promise<boolean> {
+    try {
+      const relationship = await this.getUserRelationship(followeeId);
+      return relationship === 'Following' || relationship === 'Mutual';
+    } catch (error) {
+      console.error('Error checking follow status:', error);
+      return false;
+    }
+  }
+
+  async getFollowers(userId: string) {
+    try {
+      const result = await this.actor.getFollowers(userId);
+      return result;
+    } catch (error) {
+      console.error('Error getting followers:', error);
+      return [];
+    }
+  }
+
+  async getFollowing(userId: string) {
+    try {
+      const result = await this.actor.getFollowing(userId);
+      return result;
+    } catch (error) {
+      console.error('Error getting following:', error);
+      return [];
+    }
+  }
 
   async followUser(userId: string): Promise<boolean> {
     try {
       // Convert string principal to Principal object
       const principal = Principal.fromText(userId);
       const result = await this.actor.followUser(principal);
+      console.log('Follow user result:', result); // Debug log
+      
+      // Handle the case where user is already being followed
+      if ('err' in result && result.err === "Already following this user") {
+        return true; // Treat as success since the desired state is achieved
+      }
+      
       return 'ok' in result;
     } catch (error) {
       console.error('Error following user:', error);
@@ -52,6 +113,13 @@ export class UserService {
       // Convert string principal to Principal object
       const principal = Principal.fromText(userId);
       const result = await this.actor.unfollowUser(principal);
+      console.log('Unfollow user result:', result); // Debug log
+      
+      // Handle the case where user is already not being followed
+      if ('err' in result && result.err === "Not following this user") {
+        return true; // Treat as success since the desired state is achieved
+      }
+      
       return 'ok' in result;
     } catch (error) {
       console.error('Error unfollowing user:', error);
@@ -64,8 +132,32 @@ export class UserService {
       // Convert string principal to Principal object
       const principal = Principal.fromText(targetUserId);
       const result = await this.actor.getUserRelationshipWithAuth(principal);
+      console.log('Relationship result for', targetUserId, ':', result); // Debug log
+    
       if ('ok' in result) {
-        switch (result.ok) {
+        // Handle different possible formats of the variant
+        const relationship = result.ok;
+        if (typeof relationship === 'string') {
+          // Handle string format
+          switch (relationship) {
+            case 'Following': return 'Following';
+            case 'Follower': return 'Follower';  
+            case 'Mutual': return 'Mutual';
+            case 'Subscriber': return 'Subscriber';
+            case 'Blocked': return 'Blocked';
+            default: return 'None';
+          }
+        } else if (typeof relationship === 'object') {
+          // Handle object format with variant keys
+          if ('Following' in relationship) return 'Following';
+          if ('Follower' in relationship) return 'Follower';
+          if ('Mutual' in relationship) return 'Mutual';
+          if ('Subscriber' in relationship) return 'Subscriber';
+          if ('Blocked' in relationship) return 'Blocked';
+          if ('None' in relationship) return 'None';
+        }
+        // Handle hash format
+        switch (relationship) {
           case '#Following': return 'Following';
           case '#Follower': return 'Follower';
           case '#Mutual': return 'Mutual';

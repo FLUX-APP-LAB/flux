@@ -92,6 +92,7 @@ interface AppState {
   sidebarOpen: boolean;
   desktopSidebarCollapsed: boolean;
   activePage: 'home' | 'discover' | 'following' | 'profile' | 'stream' | 'creator' | 'trending' | 'gaming' | 'rewards' | 'saved' | 'notifications' | 'settings' | 'wallet';
+  selectedUser: any | null;
   
   // Actions
   setCurrentUser: (user: User | null) => void;
@@ -109,6 +110,7 @@ interface AppState {
   setSidebarOpen: (open: boolean) => void;
   setDesktopSidebarCollapsed: (collapsed: boolean) => void;
   setActivePage: (page: AppState['activePage']) => void;
+  setSelectedUser: (user: any | null) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -126,6 +128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarOpen: false,
   desktopSidebarCollapsed: false,
   activePage: 'home',
+  selectedUser: null,
   
   // Actions
   setCurrentUser: (user) => set({ currentUser: user }),
@@ -160,4 +163,5 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setDesktopSidebarCollapsed: (collapsed) => set({ desktopSidebarCollapsed: collapsed }),
   setActivePage: (page) => set({ activePage: page }),
+  setSelectedUser: (user) => set({ selectedUser: user }),
 }));

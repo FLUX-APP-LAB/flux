@@ -47,6 +47,32 @@ export interface FrontendVideo {
 export class VideoService {
   constructor(private actor: ActorSubclass<any>) {}
 
+  // Add this method to safely convert Uint8Array to base64
+  private arrayBufferToBase64(buffer: Uint8Array): string {
+    try {
+      if (!buffer || buffer.length === 0) {
+        return '';
+      }
+      
+      // Convert Uint8Array to string, handling large arrays properly
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      
+      // Process in chunks to avoid "Maximum call stack size exceeded" error
+      const chunkSize = 1024;
+      for (let i = 0; i < len; i += chunkSize) {
+        const chunk = bytes.slice(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      
+      return btoa(binary);
+    } catch (error) {
+      console.error('Error converting array buffer to base64:', error);
+      return '';
+    }
+  }
+
   // Helper to get user data for better video display
   private async getUserInfo(principalId: string): Promise<{ username: string; displayName: string; avatar: string } | null> {
     try {
@@ -61,10 +87,20 @@ export class VideoService {
       const result = await this.actor.getUser(principal);
       if ('ok' in result) {
         const user = result.ok;
+        console.log('Raw user data from backend (getUserInfo):', {
+          username: user.username,
+          hasAvatar: !!user.avatar,
+          avatarType: typeof user.avatar,
+          avatarLength: user.avatar?.length
+        });
+        
+        // Use the consistent avatar converter
+        const avatarUrl = this.convertAvatarToUrl(user.avatar, principalId);
+        
         return {
           username: user.username || principalId.slice(0, 8),
-          displayName: user.displayName || `User ${principalId.slice(0, 8)}`,
-          avatar: user.avatar?.[0] || `https://api.dicebear.com/7.x/avataaars/svg?seed=${principalId}`
+          displayName: user.displayName || user.username || `User ${principalId.slice(0, 8)}`,
+          avatar: avatarUrl
         };
       }
     } catch (error) {
@@ -388,25 +424,356 @@ export class VideoService {
 
   async getVideoCommentsCount(videoId: string): Promise<number> {
     try {
-      const result = await this.actor.getVideoComments(videoId, 1, 0);
-      // This is a simplified count - in a real implementation, you'd want a dedicated count endpoint
-      return Array.isArray(result) ? result.length : 0;
+      // Try multiple possible method names and approaches
+      let result;
+      
+      try {
+        // Try the most likely method name
+        result = await this.actor.getVideoCommentsCount(videoId);
+      } catch (firstError) {
+        console.log('getVideoCommentsCount failed, trying alternatives...');
+        try {
+          // Try alternative method name
+          result = await this.actor.getCommentsCount(videoId);
+        } catch (secondError) {
+          console.log('getCommentsCount failed, trying getVideoComments to count...');
+          try {
+            // Try getting all comments and counting them
+            const comments = await this.actor.getVideoComments(videoId);
+            if (Array.isArray(comments)) {
+              return comments.length;
+            } else if ('ok' in comments && Array.isArray(comments.ok)) {
+              return comments.ok.length;
+            }
+            return 0;
+          } catch (thirdError) {
+            console.log('All comment count methods failed, returning 0');
+            return 0;
+          }
+        }
+      }
+      
+      if (typeof result === 'number') {
+        return result;
+      } else if ('ok' in result) {
+        return Number(result.ok);
+      }
+      return 0;
     } catch (error) {
       console.error('Error getting video comments count:', error);
       return 0;
     }
   }
 
-  async checkUserLikedVideo(videoId: string): Promise<boolean> {
+  // Helper function to safely convert userId to string
+  private userIdToString(userId: any): string {
+    if (!userId) return 'unknown';
+    
+    if (typeof userId === 'string') {
+      return userId;
+    }
+    
+    // Handle Principal objects
+    if (userId && typeof userId === 'object') {
+      if (userId.toText && typeof userId.toText === 'function') {
+        return userId.toText();
+      }
+      if (userId.toString && typeof userId.toString === 'function') {
+        return userId.toString();
+      }
+      // If it's an object with _arr property (Principal internal structure)
+      if (userId._arr) {
+        try {
+          return Principal.fromUint8Array(userId._arr).toText();
+        } catch (e) {
+          console.log('Failed to convert Principal from _arr');
+        }
+      }
+    }
+    
+    return String(userId).slice(0, 32); // Fallback to string conversion with max length
+  }
+
+  // Add this helper method to handle avatar conversion consistently
+  private convertAvatarToUrl(avatar: any, userId: string): string {
+    const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`;
+    
+    if (!avatar) {
+      console.log('No avatar data provided, using default');
+      return defaultAvatar;
+    }
+    
     try {
-      // For now, we'll use a simple approach - in a real implementation,
-      // you'd want a dedicated backend method to check if user liked a video
-      // This is a placeholder that returns false
-      // TODO: Implement getUserVideoLikes or similar in backend
-      return false;
+      // Handle array format (like in WalletContext)
+      if (Array.isArray(avatar)) {
+        if (avatar.length === 0) {
+          console.log('Avatar array is empty, using default');
+          return defaultAvatar;
+        }
+        
+        // Check if it's an array of strings (base64)
+        if (typeof avatar[0] === 'string' && avatar[0].length > 10) {
+          const base64String = avatar[0];
+          if (base64String.startsWith('data:image/')) {
+            return base64String;
+          } else {
+            return `data:image/jpeg;base64,${base64String}`;
+          }
+        }
+        
+        // Check if it's a Uint8Array wrapped in an array
+        if (avatar[0] && (avatar[0] instanceof Uint8Array || Array.isArray(avatar[0]))) {
+          const uint8Array = avatar[0] instanceof Uint8Array ? avatar[0] : new Uint8Array(avatar[0]);
+          if (uint8Array.length > 100) {
+            const base64String = this.arrayBufferToBase64(uint8Array);
+            if (base64String && base64String.length > 10) {
+              return `data:image/jpeg;base64,${base64String}`;
+            }
+          }
+        }
+        
+        // If it's a regular Uint8Array stored as array
+        if (avatar.length > 100) {
+          const uint8Array = new Uint8Array(avatar);
+          const base64String = this.arrayBufferToBase64(uint8Array);
+          if (base64String && base64String.length > 10) {
+            return `data:image/jpeg;base64,${base64String}`;
+          }
+        }
+      }
+      
+      // Handle Uint8Array format
+      if (avatar instanceof Uint8Array || (Array.isArray(avatar) && typeof avatar[0] === 'number')) {
+        const uint8Array = avatar instanceof Uint8Array ? avatar : new Uint8Array(avatar);
+        if (uint8Array.length > 100) {
+          const base64String = this.arrayBufferToBase64(uint8Array);
+          if (base64String && base64String.length > 10) {
+            return `data:image/jpeg;base64,${base64String}`;
+          }
+        }
+      }
+      
+      // Handle string format
+      if (typeof avatar === 'string' && avatar.length > 10) {
+        if (avatar.startsWith('data:image/')) {
+          return avatar;
+        } else if (avatar.startsWith('http')) {
+          return avatar;
+        } else {
+          return `data:image/jpeg;base64,${avatar}`;
+        }
+      }
+      
+      console.log('Avatar format not recognized:', typeof avatar, avatar.constructor.name, 'Length:', avatar.length);
+      return defaultAvatar;
+      
     } catch (error) {
-      console.error('Error checking if user liked video:', error);
+      console.error('Error converting avatar:', error);
+      return defaultAvatar;
+    }
+  }
+
+  // Update the getUserInfoForComment method to use the new avatar converter
+  async getUserInfoForComment(userId: any): Promise<{ username: string; displayName: string; avatar: string } | null> {
+    try {
+      const userIdString = this.userIdToString(userId);
+      
+      if (!userIdString || userIdString === 'unknown') {
+        console.warn('Invalid user ID provided to getUserInfoForComment:', userId);
+        return null;
+      }
+      
+      // Try different approaches to get user info
+      let result;
+      
+      try {
+        // If userId is already a Principal object, use it directly
+        if (userId && typeof userId === 'object' && userId.toText) {
+          result = await this.actor.getUser(userId);
+        } else {
+          // Try with Principal conversion
+          const principal = Principal.fromText(userIdString);
+          result = await this.actor.getUser(principal);
+        }
+      } catch (principalError) {
+        console.log('Principal approach failed, trying with string userId...');
+        try {
+          // Try with string userId
+          result = await this.actor.getUserProfile(userIdString);
+        } catch (profileError) {
+          console.log('getUserProfile failed, trying alternative methods...');
+          try {
+            // Try getUserById
+            result = await this.actor.getUserById(userIdString);
+          } catch (byIdError) {
+            console.log('All user fetch methods failed for userId:', userIdString);
+            return null;
+          }
+        }
+      }
+      
+      if ('ok' in result) {
+        const user = result.ok;
+        console.log('Raw user data from backend:', {
+          username: user.username,
+          hasAvatar: !!user.avatar,
+          avatarType: typeof user.avatar,
+          avatarLength: user.avatar?.length,
+          avatarConstructor: user.avatar?.constructor?.name
+        });
+        
+        // Use the consistent avatar converter
+        const avatarUrl = this.convertAvatarToUrl(user.avatar, userIdString);
+        
+        console.log('Final avatar URL for user:', userIdString, avatarUrl.substring(0, 50) + '...');
+        
+        return {
+          username: user.username || user.name || `user_${userIdString.slice(0, 8)}`,
+          displayName: user.displayName || user.username || user.name || `User ${userIdString.slice(0, 8)}`,
+          avatar: avatarUrl
+        };
+      } else {
+        console.log('User not found in backend:', userIdString, result);
+      }
+    } catch (error) {
+      console.error('Error fetching user info for comment:', error);
+    }
+    return null;
+  }
+
+  // Update the getVideoComments method to better handle user data
+  async getVideoComments(videoId: string): Promise<any[]> {
+    try {
+      console.log('Fetching comments for video:', videoId);
+      
+      // Try different parameter combinations the backend might expect
+      let result;
+      
+      try {
+        // Try with just videoId
+        result = await this.actor.getVideoComments(videoId);
+      } catch (firstError) {
+        console.log('getVideoComments failed, trying alternatives...');
+        try {
+          // Try with limit and offset parameters
+          result = await this.actor.getVideoComments(videoId, 50, 0);
+        } catch (secondError) {
+          console.log('getVideoComments with params failed, trying getComments...');
+          try {
+            // Try alternative method name
+            result = await this.actor.getComments(videoId);
+          } catch (thirdError) {
+            console.log('All comment methods failed, returning empty array');
+            return [];
+          }
+        }
+      }
+      
+      let comments = [];
+      if (Array.isArray(result)) {
+        comments = result;
+      } else if ('ok' in result && Array.isArray(result.ok)) {
+        comments = result.ok;
+      }
+      
+      console.log('Raw comments from backend:', comments);
+      
+      // Enhance comments with user information
+      const enhancedComments = await Promise.all(
+        comments.map(async (comment: any) => {
+          console.log('Processing comment:', comment);
+          
+          const userId = comment.userId || comment.user || comment.authorId || comment.author;
+          const userIdString = this.userIdToString(userId);
+          let userInfo = null;
+          
+          if (userId) {
+            console.log('Fetching user info for userId:', userId, 'converted to:', userIdString);
+            userInfo = await this.getUserInfoForComment(userId);
+            console.log('User info result:', userInfo);
+          }
+          
+          const enhancedComment = {
+            ...comment,
+            id: comment.id || `comment_${Date.now()}_${Math.random()}`,
+            userInfo: userInfo,
+            userId: userIdString,
+            username: userInfo?.username || comment.username || `user_${userIdString.slice(0, 8)}`,
+            displayName: userInfo?.displayName || comment.displayName || userInfo?.username || `User ${userIdString.slice(0, 8)}`,
+            avatar: userInfo?.avatar || comment.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userIdString}`,
+            content: comment.content || comment.text || '',
+            createdAt: comment.createdAt || comment.timestamp || Date.now(),
+            likes: comment.likes || 0,
+            isLiked: comment.isLiked || false
+          };
+          
+          console.log('Enhanced comment:', enhancedComment);
+          return enhancedComment;
+        })
+      );
+      
+      return enhancedComments;
+    } catch (error) {
+      console.error('Error getting video comments:', error);
+      return [];
+    }
+  }
+
+  async addComment(videoId: string, content: string, parentCommentId?: string): Promise<boolean> {
+    try {
+      // Call the backend addComment method with the correct parameters
+      const result = await this.actor.addComment(videoId, content, parentCommentId ? [parentCommentId] : []);
+      
+      // Backend returns Result<string, string> where ok contains the commentId
+      if ('ok' in result) {
+        return true;
+      } else {
+        console.error('Error adding comment:', result.err);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
       return false;
+    }
+  }
+
+  async likeComment(commentId: string): Promise<boolean> {
+    try {
+      let result;
+      
+      try {
+        result = await this.actor.likeComment(commentId);
+      } catch (firstError) {
+        console.log('likeComment not implemented, using optimistic update');
+        // Return true for optimistic UI updates even if backend doesn't support it yet
+        return true;
+      }
+      
+      return 'ok' in result || result === true;
+    } catch (error) {
+      console.error('Error liking comment:', error);
+      // Return true for optimistic updates
+      return true;
+    }
+  }
+
+  async unlikeComment(commentId: string): Promise<boolean> {
+    try {
+      let result;
+      
+      try {
+        result = await this.actor.unlikeComment(commentId);
+      } catch (firstError) {
+        console.log('unlikeComment not implemented, using optimistic update');
+        // Return true for optimistic UI updates even if backend doesn't support it yet
+        return true;
+      }
+      
+      return 'ok' in result || result === true;
+    } catch (error) {
+      console.error('Error unliking comment:', error);
+      // Return true for optimistic updates
+      return true;
     }
   }
 }

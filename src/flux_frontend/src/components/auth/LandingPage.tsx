@@ -1,9 +1,8 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Wallet, Play, Users, Zap, ArrowRight, Gamepad2, Headphones, Video, Shield, Sparkles, Coins, Trophy } from 'lucide-react';
+import { Wallet, Play, Users, Zap, ArrowRight, Gamepad2, Headphones, Video, Shield, Sparkles, Coins, Trophy, Menu, X } from 'lucide-react';
 import { Button } from '../ui/Button';
-// Removed inline Signup flow; App decides based on auth + currentUser
 import { useWallet } from '../../hooks/useWallet';
 import { useAppStore } from '../../store/appStore';
 import toast from 'react-hot-toast';
@@ -15,7 +14,6 @@ const Hero3D: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-    // Try to detect if local HDRI exists to avoid CORS issues with remote assets
     fetch('/hdri/potsdamer_platz_1k.hdr', { method: 'HEAD' })
       .then((res) => {
         if (!isMounted) return;
@@ -32,51 +30,48 @@ const Hero3D: React.FC = () => {
 
   return (
     <Canvas camera={{ position: [0, 0, 4], fov: 45 }}>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 5, 5]} intensity={1.2} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[5, 5, 5]} intensity={0.8} />
       <Suspense fallback={null}>
-        <Float speed={1.2} rotationIntensity={0.6} floatIntensity={1.2}>
+        <Float speed={1.5} rotationIntensity={0.4} floatIntensity={0.8}>
           <mesh>
-            <icosahedronGeometry args={[1.2, 1]} />
-            {/* @ts-ignore - drei augments material */}
+            <icosahedronGeometry args={[1, 2]} />
             <MeshDistortMaterial
-              color="#7c3aed"
-              emissive="#a78bfa"
-              emissiveIntensity={0.2}
-              roughness={0.2}
-              metalness={0.4}
-              distort={0.35}
-              speed={1.5}
+              color="#6366f1"
+              emissive="#818cf8"
+              emissiveIntensity={0.15}
+              roughness={0.1}
+              metalness={0.6}
+              distort={0.25}
+              speed={1.2}
               transparent
-              opacity={0.95}
+              opacity={0.9}
             />
           </mesh>
         </Float>
         {useLocalHdri ? (
           <Environment files="/hdri/potsdamer_platz_1k.hdr" />
         ) : (
-          <Environment preset="city" />
+          <Environment preset="studio" />
         )}
       </Suspense>
-      <OrbitControls enablePan={false} enableZoom={false} autoRotate autoRotateSpeed={0.6} />
+      <OrbitControls enablePan={false} enableZoom={false} autoRotate autoRotateSpeed={0.4} />
     </Canvas>
   );
 };
 
 export const LandingPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { login, authError } = useWallet();
   const { isAuthenticated, currentUser } = useAppStore();
-  
 
   const connectWallet = async () => {
     setIsLoading(true);
     try {
       console.log('Starting wallet connection...');
       await login();
-      // Don't navigate here - let the AppRouter handle navigation
-      // based on the updated authentication state
     } catch (error) {
       console.error('Wallet connection error:', error);
       toast.error('Failed to connect wallet. Please try again.');
@@ -85,175 +80,319 @@ export const LandingPage: React.FC = () => {
     }
   };
 
-  // Show error message if there's an authentication error
   useEffect(() => {
     if (authError) {
       toast.error(`Authentication error: ${authError}`);
     }
   }, [authError]);
 
-  // No local signup routing; App handles view switching
-  
-
   const features = [
     {
-      title: 'Stream & Earn',
-      description: 'Monetize your gaming content with crypto rewards',
+      title: 'Instant Streaming',
+      description: 'Go live in seconds with zero setup complexity',
       icon: Video,
+      gradient: 'from-purple-500 to-pink-500'
     },
     {
-      title: 'Web3 Gaming',
-      description: 'Connect your wallet and join the future of gaming',
+      title: 'Crypto Rewards',
+      description: 'Earn and tip with native crypto integration',
       icon: Wallet,
+      gradient: 'from-blue-500 to-cyan-500'
     },
     {
-      title: 'Global Community',
-      description: 'Connect with gamers and creators worldwide',
+      title: 'Global Reach',
+      description: 'Connect with viewers across the world',
       icon: Users,
+      gradient: 'from-green-500 to-emerald-500'
     },
     {
-      title: 'Next-Gen Tech',
-      description: 'Experience cutting-edge streaming technology',
+      title: 'Ultra Low Latency',
+      description: 'Real-time interaction with cutting-edge tech',
       icon: Zap,
+      gradient: 'from-orange-500 to-red-500'
     },
   ];
 
-  // Rendering always shows landing; after login, App switches views
-
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Premium gradient grid background */}
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
+      {/* Refined background with subtle patterns */}
       <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,rgba(124,58,237,0.25),rgba(17,24,39,0))]" />
-        <div className="absolute inset-0 bg-[radial-gradient(40%_40%_at_80%_20%,rgba(168,85,247,0.12),rgba(0,0,0,0))]" />
-        <img src="/17517500282326374985607665398759.jpg" alt="Gaming Setup" className="w-full h-full object-cover opacity-20" />
-        <div className="absolute inset-0 bg-black/60" />
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.1),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.08),transparent_50%)]" />
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
       </div>
 
-      {/* Floating icons subtle parallax */}
+      {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {[
-          { icon: Gamepad2, delay: 0, x: '8%', y: '18%' },
-          { icon: Headphones, delay: 1, x: '88%', y: '12%' },
-          { icon: Video, delay: 2, x: '12%', y: '72%' },
-          { icon: Play, delay: 3, x: '82%', y: '78%' },
+          { icon: Gamepad2, delay: 0, x: '10%', y: '20%' },
+          { icon: Headphones, delay: 2, x: '85%', y: '15%' },
+          { icon: Video, delay: 4, x: '15%', y: '75%' },
+          { icon: Play, delay: 6, x: '80%', y: '70%' },
         ].map((item, i) => (
           <motion.div
             key={i}
-            className="absolute w-8 h-8 text-white/15"
+            className="absolute w-6 h-6 text-white/5"
             style={{ left: item.x, top: item.y }}
-            animate={{ y: [-15, 15, -15], rotate: [0, 360], opacity: [0.15, 0.35, 0.15] }}
-            transition={{ duration: 10 + item.delay * 2, repeat: Infinity, ease: "easeInOut", delay: item.delay }}
+            animate={{ 
+              y: [-10, 10, -10], 
+              opacity: [0.05, 0.15, 0.05],
+              scale: [1, 1.1, 1]
+            }}
+            transition={{ 
+              duration: 8 + item.delay, 
+              repeat: Infinity, 
+              ease: "easeInOut", 
+              delay: item.delay 
+            }}
           >
             <item.icon className="w-full h-full" />
           </motion.div>
         ))}
       </div>
 
-      {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Top Navigation */}
-        <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="p-6">
+        {/* Sleeker Navigation */}
+        <motion.header 
+          initial={{ opacity: 0, y: -20 }} 
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 lg:p-6"
+        >
           <div className="flex items-center justify-between max-w-7xl mx-auto">
-            <div className="flex items-center space-x-3">
-              <img src="/logo.png" alt="FLUX" className="w-8 h-8" />
-              <motion.div className="text-2xl font-extrabold bg-flux-gradient bg-clip-text text-transparent tracking-wide" whileHover={{ scale: 1.04 }}>
-                FLUX
-              </motion.div>
-            </div>
-            <div className="hidden md:flex items-center gap-1 text-white/80">
-              <Button variant="ghost" className="text-white/80 hover:text-white">Features</Button>
-              <Button variant="ghost" className="text-white/80 hover:text-white">Community</Button>
-              <Button variant="ghost" className="text-white/80 hover:text-white">Docs</Button>
-              <Button onClick={connectWallet} isLoading={isLoading} className="ml-2 bg-flux-gradient text-white rounded-xl px-5 py-2.5">Connect</Button>
-            </div>
-          </div>
-        </motion.header>
-
-        {/* Hero */}
-        <div className="flex-1 flex items-center justify-center px-6 pt-6">
-          <div className="w-full max-w-7xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-              {/* Copy */}
-              <div className="order-2 lg:order-1 text-center lg:text-left space-y-8">
-                <motion.h1 className="text-5xl lg:text-7xl font-extrabold text-white leading-[1.1] tracking-tight" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                  Create.
-                  <span className="bg-flux-gradient bg-clip-text text-transparent block">Stream.</span>
-                  <span className="text-flux-accent-gold">Own it.</span>
-                </motion.h1>
-
-                <motion.p className="text-lg lg:text-[1.35rem] text-white/85 max-w-xl lg:max-w-2xl mx-auto lg:mx-0 leading-relaxed" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-                  A premium web3 platform for gamers and creators. Go live in seconds, reward your community, and get paid instantly.
-                </motion.p>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="pt-2">
-                  <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-3 sm:justify-start justify-center">
-                    <Button onClick={connectWallet} isLoading={isLoading} className="bg-flux-gradient hover:opacity-90 text-white px-8 py-4 text-lg font-bold rounded-2xl shadow-2xl transform hover:scale-[1.02] transition-all duration-300" size="lg">
-                      <Wallet className="w-6 h-6 mr-3" />
-                      {isLoading ? 'Connecting...' : 'Connect Wallet'}
-                      <ArrowRight className="w-6 h-6 ml-3" />
-                    </Button>
-                    <Button variant="ghost" className="text-white/80 hover:text-white border border-white/10 hover:border-white/30 rounded-2xl px-6 py-4">
-                      <Play className="w-5 h-5 mr-2" /> Watch Demo
-                    </Button>
-                  </div>
-
-                  {/* <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }} className="mt-6 p-4 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 max-w-md mx-auto lg:mx-0">
-                    <div className="flex items-center justify-center flex-wrap gap-4 text-white/80 text-sm">
-                      <div className="flex items-center gap-2"><div className="w-2 h-2 bg-flux-accent-green rounded-full animate-pulse" /><span>Stoic Wallet</span></div>
-                      <div className="flex items-center gap-2"><div className="w-2 h-2 bg-flux-accent-green rounded-full animate-pulse" /><span>NNS</span></div>
-                      <div className="flex items-center gap-2"><div className="w-2 h-2 bg-flux-accent-green rounded-full animate-pulse" /><span>Plug</span></div>
-                    </div>
-                    <p className="text-white/60 text-xs mt-2 text-center">Secure connection • No gas to join • Instant rewards</p>
-                  </motion.div> */}
-                </motion.div>
-              </div>
-
-              {/* Visual */}
-              <div className="order-1 lg:order-2">
-                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} className="relative h-[360px] sm:h-[440px] lg:h-[540px] rounded-3xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-md">
-                  <div className="absolute inset-0">
-                    <Hero3D />
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-tr from-flux-primary/10 via-transparent to-flux-accent-purple/10 pointer-events-none" />
-                  <div className="absolute -inset-24 opacity-[0.08] bg-[radial-gradient(circle_at_center,white,transparent_65%)]" />
-                </motion.div>
+            <motion.div 
+              className="flex items-center space-x-4"
+              whileHover={{ scale: 1.02 }}
+            >
+              <img src="/logo.png" alt="Flux Logo" className="w-12 h-12 object-contain" />
+              
+              <div className="text-3xl font-black bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent tracking-tight">
+              FLUX
               </div>
             </motion.div>
+
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-1">
+              <Button variant="ghost" className="text-slate-300 hover:text-white hover:bg-white/5 rounded-xl px-4 py-2">
+                Features
+              </Button>
+              <Button variant="ghost" className="text-slate-300 hover:text-white hover:bg-white/5 rounded-xl px-4 py-2">
+                Community
+              </Button>
+              <Button variant="ghost" className="text-slate-300 hover:text-white hover:bg-white/5 rounded-xl px-4 py-2">
+                Docs
+              </Button>
+              <Button 
+                onClick={connectWallet} 
+                isLoading={isLoading} 
+                className="ml-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl px-6 py-2.5 font-semibold shadow-lg transition-all duration-300"
+              >
+                Connect Wallet
+              </Button>
+            </div>
+
+            {/* Mobile menu button */}
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-white/80 hover:text-white"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+
+          {/* Mobile Navigation */}
+          {mobileMenuOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="md:hidden mt-4 p-4 bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-white/10"
+            >
+              <div className="flex flex-col space-y-2">
+                <Button variant="ghost" className="text-slate-300 hover:text-white justify-start">Features</Button>
+                <Button variant="ghost" className="text-slate-300 hover:text-white justify-start">Community</Button>
+                <Button variant="ghost" className="text-slate-300 hover:text-white justify-start">Docs</Button>
+                <Button 
+                  onClick={connectWallet} 
+                  isLoading={isLoading} 
+                  className="mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold"
+                >
+                  Connect Wallet
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </motion.header>
+
+        {/* Hero Section - More Refined */}
+        <div className="flex-1 flex items-center justify-center px-4 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+              {/* Content */}
+              <motion.div 
+                initial={{ opacity: 0, y: 40 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                transition={{ delay: 0.2 }}
+                className="text-center lg:text-left"
+              >
+                <motion.h1 
+                  className="text-5xl lg:text-7xl font-black text-white leading-[0.9] tracking-tight mb-8"
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: 0.3 }}
+                >
+                  Stream
+                  <span className="block bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    Without
+                  </span>
+                  <span className="block text-slate-200">Limits</span>
+                </motion.h1>
+
+                {/* 3D Visual - Mobile Only */}
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }} 
+                  animate={{ opacity: 1, scale: 1 }} 
+                  transition={{ delay: 0.4 }}
+                  className="lg:hidden mb-8"
+                >
+                  <div className="relative h-[300px] rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-sm border border-white/10 shadow-2xl">
+                    <Hero3D />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent pointer-events-none" />
+                  </div>
+                </motion.div>
+
+                <motion.p 
+                  className="text-xl text-slate-400 max-w-2xl mx-auto lg:mx-0 mb-10 leading-relaxed"
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: 0.4 }}
+                >
+                  The next-generation streaming platform built for creators. 
+                  Connect your wallet, go live instantly, and earn crypto rewards from your community.
+                </motion.p>
+
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: 0.5 }}
+                  className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+                >
+                  <Button 
+                    onClick={connectWallet} 
+                    isLoading={isLoading}
+                    size="lg"
+                    className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-8 py-4 rounded-2xl font-bold text-lg shadow-2xl hover:shadow-indigo-500/25 transition-all duration-300 group"
+                  >
+                    <Wallet className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
+                    {isLoading ? 'Connecting...' : 'Get Started'}
+                    <ArrowRight className="w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                  
+                  <Button 
+                    variant="ghost" 
+                    size="lg"
+                    className="text-slate-300 hover:text-white border-2 border-slate-700 hover:border-slate-600 rounded-2xl px-8 py-4 font-semibold transition-all duration-300"
+                  >
+                    <Play className="w-5 h-5 mr-2" />
+                    Watch Demo
+                  </Button>
+                </motion.div>
+              </motion.div>
+
+              {/* 3D Visual - Desktop Only */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }} 
+                animate={{ opacity: 1, scale: 1 }} 
+                transition={{ delay: 0.4 }}
+                className="hidden lg:block"
+              >
+                <div className="relative h-[500px] rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-sm border border-white/10 shadow-2xl">
+                  <Hero3D />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent pointer-events-none" />
+                </div>
+              </motion.div>
+            </div>
           </div>
         </div>
 
-        {/* Social proof band */}
-        <div className="px-6 my-5">
+        {/* Trust Indicators */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.6 }}
+          className="px-4 lg:px-8 py-12"
+        >
           <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-10">
-              {[{ label: 'Non-custodial', icon: Shield }, { label: 'Creator-first', icon: Sparkles }, { label: 'Crypto-native', icon: Coins }, { label: 'Esports-ready', icon: Trophy }].map((item, i) => (
-                <motion.div key={item.label} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 * i }} className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80">
-                  <item.icon className="w-4 h-4 text-white/70" />
-                  <span className="text-sm">{item.label}</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Secure', icon: Shield },
+                { label: 'Fast', icon: Zap },
+                { label: 'Rewarding', icon: Coins },
+                { label: 'Global', icon: Trophy }
+              ].map((item, i) => (
+                <motion.div 
+                  key={item.label}
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: 0.7 + i * 0.1 }}
+                  className="flex items-center justify-center gap-3 py-4 px-6 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-slate-700 transition-colors"
+                >
+                  <item.icon className="w-4 h-4 text-slate-400" />
+                  <span className="text-slate-300 font-medium">{item.label}</span>
                 </motion.div>
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Features */}
-        <motion.section initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="px-6 pb-12">
+        {/* Features Grid - Refined */}
+        <motion.section 
+          initial={{ opacity: 0, y: 50 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.8 }}
+          className="px-4 lg:px-8 py-16"
+        >
           <div className="max-w-7xl mx-auto">
-            <motion.h2 className="text-3xl lg:text-4xl font-extrabold text-white text-center mb-12 tracking-tight" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
-              Why creators choose <span className="bg-flux-gradient bg-clip-text text-transparent">FLUX</span>
-            </motion.h2>
+            <div className="text-center mb-16">
+              <motion.h2 
+                className="text-4xl lg:text-5xl font-black text-white mb-4 tracking-tight"
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                transition={{ delay: 0.9 }}
+              >
+                Built for <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Creators</span>
+              </motion.h2>
+              <motion.p 
+                className="text-xl text-slate-400 max-w-2xl mx-auto"
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                transition={{ delay: 1 }}
+              >
+                Everything you need to stream, engage, and monetize your content
+              </motion.p>
+            </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-7">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
               {features.map((feature, index) => (
-                <motion.div key={feature.title} className="group relative" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 + index * 0.1 }} whileHover={{ y: -8, scale: 1.01 }}>
-                  <div className="absolute inset-0 rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-md group-hover:border-flux-primary/50 transition-all duration-300" />
-                  <div className="relative p-7 text-center">
-                    <div className="w-16 h-16 bg-flux-gradient rounded-2xl flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform duration-300">
-                      <feature.icon className="w-8 h-8 text-white" />
+                <motion.div 
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 30 }} 
+                  whileInView={{ opacity: 1, y: 0 }} 
+                  viewport={{ once: true }} 
+                  transition={{ delay: index * 0.1 }}
+                  whileHover={{ y: -8, scale: 1.02 }}
+                  className="group"
+                >
+                  <div className="relative p-8 rounded-3xl bg-slate-900/50 border border-slate-800 hover:border-slate-700 transition-all duration-300 hover:shadow-2xl">
+                    <div className={`w-14 h-14 bg-gradient-to-br ${feature.gradient} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                      <feature.icon className="w-7 h-7 text-white" />
                     </div>
-                    <h3 className="text-xl font-bold text-white mb-3 group-hover:text-flux-primary transition-colors">{feature.title}</h3>
-                    <p className="text-white/70 leading-relaxed">{feature.description}</p>
+                    <h3 className="text-xl font-bold text-white mb-3 group-hover:text-indigo-400 transition-colors">
+                      {feature.title}
+                    </h3>
+                    <p className="text-slate-400 leading-relaxed">
+                      {feature.description}
+                    </p>
                   </div>
                 </motion.div>
               ))}
@@ -261,31 +400,52 @@ export const LandingPage: React.FC = () => {
           </div>
         </motion.section>
 
-        {/* Stats band */}
-        <div className="px-6 pb-10">
+        {/* Stats Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }} 
+          whileInView={{ opacity: 1, y: 0 }} 
+          viewport={{ once: true }}
+          className="px-4 lg:px-8 py-16"
+        >
           <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
               {[
-                { k: '25ms', v: 'avg stream latency' },
-                { k: '0%', v: 'platform cut on tips' },
-                { k: '150k+', v: 'monthly viewers' },
-                { k: '4.9/5', v: 'creator satisfaction' },
-              ].map((s, i) => (
-                <div key={s.k} className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
-                  <div className="text-3xl font-extrabold text-white tracking-tight">{s.k}</div>
-                  <div className="text-white/60 text-sm mt-1">{s.v}</div>
-                </div>
+                { value: '<25ms', label: 'Stream Latency' },
+                { value: '0%', label: 'Platform Fees' },
+                { value: '99.9%', label: 'Uptime' },
+                { value: '24/7', label: 'Support' },
+              ].map((stat, i) => (
+                <motion.div 
+                  key={stat.value}
+                  initial={{ opacity: 0, y: 20 }} 
+                  whileInView={{ opacity: 1, y: 0 }} 
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="text-center p-6 rounded-2xl bg-slate-900/30 border border-slate-800"
+                >
+                  <div className="text-3xl lg:text-4xl font-black text-white mb-2">
+                    {stat.value}
+                  </div>
+                  <div className="text-slate-400 font-medium">
+                    {stat.label}
+                  </div>
+                </motion.div>
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Footer CTA */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="text-center pb-10">
-          <motion.div className="inline-flex items-center space-x-2 text-white/70 text-sm" animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}>
-            <div className="w-2 h-2 bg-flux-accent-green rounded-full animate-pulse" />
-            <span>Ready to build your audience on-chain?</span>
-          </motion.div>
+        <motion.div 
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          transition={{ delay: 1.2 }}
+          className="text-center py-16"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/50 border border-slate-800 text-slate-400">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-sm">Ready to join the future of streaming?</span>
+          </div>
         </motion.div>
       </div>
     </div>

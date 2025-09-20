@@ -210,8 +210,17 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
     }
   };
 
-  const handlePrevStep = () => {
-    setCurrentStep(currentStep - 1);
+  const handlePrevStep = async () => {
+    if (currentStep === 0) {
+      // Go back to landing page and disconnect wallet if connected
+      if (isAuthenticated) {
+        await handleWalletDisconnect();
+        navigate('/landing');
+      }
+      onBack();
+    } else {
+      setCurrentStep(currentStep - 1);
+    }
   };
 
   const handleSubmit = async () => {

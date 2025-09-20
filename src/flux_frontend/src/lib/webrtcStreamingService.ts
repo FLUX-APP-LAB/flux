@@ -184,6 +184,12 @@ export class WebRTCStreamingService {
     try {
       console.log('Joining stream:', streamId);
       
+      // Check if actor is available
+      if (!this.actor) {
+        console.error('Actor not available for joining stream');
+        return false;
+      }
+      
       // Check if already connected to this stream
       if (this.currentSessionId === streamId && !this.isStreamer && this.remotePeerConnection) {
         console.log('Already connected to this stream');

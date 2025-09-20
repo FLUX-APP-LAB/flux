@@ -356,67 +356,6 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
                 />
               </div>
             )}
-          </div>
-
-          {/* Viewing Section */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold">Watch Stream</h3>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stream ID</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter stream ID to watch"
-                value={viewingStreamId}
-                onChange={(e) => setViewingStreamId(e.target.value)}
-                disabled={isViewing}
-              />
-            </div>
-            
-            <div className="space-x-2">
-              {!isViewing ? (
-                <Button 
-                  onClick={joinStream} 
-                  disabled={!viewingStreamId.trim() || connectionStatus === 'connecting'}
-                >
-                  {connectionStatus === 'connecting' ? 'Joining...' : 'Join Stream'}
-                </Button>
-              ) : (
-                <Button onClick={leaveStream} variant="danger">
-                  Leave Stream
-                </Button>
-              )}
-            </div>
-
-            {/* Active Streams List */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Active Streams</h4>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {activeStreams.length === 0 ? (
-                  <p className="text-sm text-gray-500">No active streams</p>
-                ) : (
-                  activeStreams.map((stream) => (
-                    <div 
-                      key={stream.id} 
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                      onClick={() => {
-                        if (!isViewing && connectionStatus !== 'connecting') {
-                          setViewingStreamId(stream.id);
-                        }
-                      }}
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{stream.title}</p>
-                        <p className="text-xs text-gray-500">by {stream.creator.displayName}</p>
-                      </div>
-                      <span className="text-xs text-gray-500">{stream.viewers} viewers</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
             {/* Viewer Video Player */}
             {viewingStream && isViewing && (
               <div className="border rounded-lg overflow-hidden">

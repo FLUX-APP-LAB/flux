@@ -236,14 +236,15 @@ export const LandingPage: React.FC = () => {
                 className="text-center lg:text-left"
               >
                 <motion.h1 
-                  className="text-5xl lg:text-7xl font-black text-white leading-[0.9] tracking-tight mb-8"
+                  className="text-5xl lg:text-7xl font-black text-white tracking-tight mb-8 mt-8 space-y-2"
+                  style={{ lineHeight: 1.5 }}
                   initial={{ opacity: 0, y: 20 }} 
                   animate={{ opacity: 1, y: 0 }} 
                   transition={{ delay: 0.3 }}
                 >
-                  Stream
-                  <span className="block bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                    Without
+                  <span className="block mb-2">Stream</span>
+                  <span className="block bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+                  Without
                   </span>
                   <span className="block text-slate-200">Limits</span>
                 </motion.h1>

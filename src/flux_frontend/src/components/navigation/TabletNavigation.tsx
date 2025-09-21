@@ -67,13 +67,13 @@ export const TabletNavigation: React.FC = () => {
   const handleLogout = async () => {
     await disconnectWallet();
     setAuthenticated(false);
-    setCurrentUser(null);
-    navigate('/landing');
+    await setCurrentUser(null);
+    navigate('/');
   };
 
   const isActiveRoute = (path: string) => {
-    if (path === '/home') {
-      return location.pathname === '/home' || location.pathname === '/';
+    if (path === '/app/home') {
+      return location.pathname === '/app/home' || location.pathname === '/app/following';
     }
     return location.pathname.startsWith(path);
   };

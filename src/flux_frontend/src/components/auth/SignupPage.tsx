@@ -215,7 +215,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
       // Go back to landing page and disconnect wallet if connected
       if (isAuthenticated) {
         await handleWalletDisconnect();
-        navigate('/landing');
+        navigate('/');
       }
       onBack();
     } else {
@@ -262,7 +262,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
         principal,
       };
       
-      setCurrentUser(newUser);
+      await setCurrentUser(newUser);
 
       const avatar = formData.profilePicture
 
@@ -315,14 +315,14 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
               hasAvatar: !!userData.avatar,
               tier: userData.tier
             });
-            setCurrentUser(userData);
+            await setCurrentUser(userData);
           } else {
             console.warn('Could not fetch user data after creation, using local data');
-            setCurrentUser(newUser);
+            await setCurrentUser(newUser);
           }
         } catch (fetchError) {
           console.error('Error fetching newly created user:', fetchError);
-          setCurrentUser(newUser);
+          await setCurrentUser(newUser);
         }
         
         setAuthenticated(true);

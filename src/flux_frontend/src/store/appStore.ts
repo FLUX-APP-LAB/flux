@@ -65,10 +65,36 @@ export interface LiveStream {
 
 export interface ChatMessage {
   id: string;
+  userId: string;
   username: string;
+  displayName: string;
+  avatar: string;
   message: string;
   timestamp: Date;
   badges?: string[];
+  messageType?: 'normal' | 'system' | 'moderator' | 'highlight';
+  emotes?: { [key: string]: string }; // emote name -> image URL
+}
+
+export interface ChatUser {
+  id: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  badges?: string[];
+  isTyping: boolean;
+}
+
+export interface ChatRoom {
+  streamId: string;
+  messages: ChatMessage[];
+  activeUsers: ChatUser[];
+  settings: {
+    enabled: boolean;
+    slowMode: number; // seconds between messages
+    subscriberOnly: boolean;
+    moderatorsOnly: boolean;
+  };
 }
 
 interface AppState {
@@ -87,6 +113,11 @@ interface AppState {
   activeStreams: LiveStream[];
   currentStream: LiveStream | null;
   
+  // Chat state
+  chatRooms: Map<string, ChatRoom>; // streamId -> ChatRoom
+  currentChatRoom: string | null;
+  typingUsers: Set<string>; // userIds currently typing
+  
   // UI state
   theme: 'light' | 'dark';
   sidebarOpen: boolean;
@@ -95,7 +126,7 @@ interface AppState {
   selectedUser: any | null;
   
   // Actions
-  setCurrentUser: (user: User | null) => void;
+  setCurrentUser: (user: User | null) => Promise<void>;
   setAuthenticated: (isAuth: boolean) => void;
   setWalletAddress: (address: string | null) => void;
   setPrincipal: (principal: string | null) => void;
@@ -106,6 +137,17 @@ interface AppState {
   isFollowingUser: (userId: string) => boolean;
   setActiveStreams: (streams: LiveStream[]) => void;
   setCurrentStream: (stream: LiveStream | null) => void;
+  
+  // Chat actions
+  initializeChatRoom: (streamId: string) => void;
+  addChatMessage: (streamId: string, message: ChatMessage) => void;
+  updateChatUser: (streamId: string, user: ChatUser) => void;
+  removeChatUser: (streamId: string, userId: string) => void;
+  setCurrentChatRoom: (streamId: string | null) => void;
+  addTypingUser: (userId: string) => void;
+  removeTypingUser: (userId: string) => void;
+  updateChatSettings: (streamId: string, settings: Partial<ChatRoom['settings']>) => void;
+  
   toggleTheme: () => void;
   setSidebarOpen: (open: boolean) => void;
   setDesktopSidebarCollapsed: (collapsed: boolean) => void;
@@ -124,6 +166,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   followingUsers: new Set<string>(),
   activeStreams: [],
   currentStream: null,
+  chatRooms: new Map<string, ChatRoom>(),
+  currentChatRoom: null,
+  typingUsers: new Set<string>(),
   theme: 'dark',
   sidebarOpen: false,
   desktopSidebarCollapsed: false,
@@ -131,7 +176,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedUser: null,
   
   // Actions
-  setCurrentUser: (user) => set({ currentUser: user }),
+  setCurrentUser: async (user) => {
+    await Promise.resolve();
+    set({ currentUser: user });
+  },
   setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
   setWalletAddress: (address) => set({ walletAddress: address }),
   setPrincipal: (principal) => set({ principal }),
@@ -159,6 +207,103 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setActiveStreams: (streams) => set({ activeStreams: streams }),
   setCurrentStream: (stream) => set({ currentStream: stream }),
+  
+  // Chat actions
+  initializeChatRoom: (streamId) => set((state) => {
+    const newChatRooms = new Map(state.chatRooms);
+    if (!newChatRooms.has(streamId)) {
+      newChatRooms.set(streamId, {
+        streamId,
+        messages: [],
+        activeUsers: [],
+        settings: {
+          enabled: true,
+          slowMode: 0,
+          subscriberOnly: false,
+          moderatorsOnly: false,
+        }
+      });
+    }
+    return { chatRooms: newChatRooms };
+  }),
+  
+  addChatMessage: (streamId, message) => set((state) => {
+    const newChatRooms = new Map(state.chatRooms);
+    const chatRoom = newChatRooms.get(streamId);
+    if (chatRoom) {
+      // Check if message with this ID already exists to prevent duplicates
+      const existingMessage = chatRoom.messages.find(m => m.id === message.id);
+      if (existingMessage) {
+        return { chatRooms: newChatRooms }; // Don't add duplicate
+      }
+      
+      const updatedChatRoom = {
+        ...chatRoom,
+        messages: [...chatRoom.messages, message].slice(-100) // Keep only last 100 messages
+      };
+      newChatRooms.set(streamId, updatedChatRoom);
+    }
+    return { chatRooms: newChatRooms };
+  }),
+  
+  updateChatUser: (streamId, user) => set((state) => {
+    const newChatRooms = new Map(state.chatRooms);
+    const chatRoom = newChatRooms.get(streamId);
+    if (chatRoom) {
+      const existingUserIndex = chatRoom.activeUsers.findIndex(u => u.id === user.id);
+      const updatedUsers = existingUserIndex >= 0 
+        ? chatRoom.activeUsers.map((u, i) => i === existingUserIndex ? user : u)
+        : [...chatRoom.activeUsers, user];
+      
+      const updatedChatRoom = {
+        ...chatRoom,
+        activeUsers: updatedUsers
+      };
+      newChatRooms.set(streamId, updatedChatRoom);
+    }
+    return { chatRooms: newChatRooms };
+  }),
+  
+  removeChatUser: (streamId, userId) => set((state) => {
+    const newChatRooms = new Map(state.chatRooms);
+    const chatRoom = newChatRooms.get(streamId);
+    if (chatRoom) {
+      const updatedChatRoom = {
+        ...chatRoom,
+        activeUsers: chatRoom.activeUsers.filter(u => u.id !== userId)
+      };
+      newChatRooms.set(streamId, updatedChatRoom);
+    }
+    return { chatRooms: newChatRooms };
+  }),
+  
+  setCurrentChatRoom: (streamId) => set({ currentChatRoom: streamId }),
+  
+  addTypingUser: (userId) => set((state) => {
+    const newTypingUsers = new Set(state.typingUsers);
+    newTypingUsers.add(userId);
+    return { typingUsers: newTypingUsers };
+  }),
+  
+  removeTypingUser: (userId) => set((state) => {
+    const newTypingUsers = new Set(state.typingUsers);
+    newTypingUsers.delete(userId);
+    return { typingUsers: newTypingUsers };
+  }),
+  
+  updateChatSettings: (streamId, settings) => set((state) => {
+    const newChatRooms = new Map(state.chatRooms);
+    const chatRoom = newChatRooms.get(streamId);
+    if (chatRoom) {
+      const updatedChatRoom = {
+        ...chatRoom,
+        settings: { ...chatRoom.settings, ...settings }
+      };
+      newChatRooms.set(streamId, updatedChatRoom);
+    }
+    return { chatRooms: newChatRooms };
+  }),
+  
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setDesktopSidebarCollapsed: (collapsed) => set({ desktopSidebarCollapsed: collapsed }),

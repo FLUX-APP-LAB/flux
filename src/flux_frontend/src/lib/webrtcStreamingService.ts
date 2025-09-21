@@ -6,7 +6,7 @@ export interface SignalingMessage {
   streamId: string;
   senderId: string;
   receiverId?: string;
-  messageType: 'offer' | 'answer' | 'iceCandidate' | 'viewerJoin' | 'viewerLeave' | 'streamEnd' | 'heartbeat';
+  messageType: 'offer' | 'answer' | 'iceCandidate' | 'viewerJoin' | 'viewerLeave' | 'streamEnd' | 'heartbeat' | 'chatMessage' | 'typing' | 'userJoin' | 'userLeave';
   payload: string;
   timestamp: number;
 }
@@ -46,6 +46,14 @@ export class WebRTCStreamingService {
   private onStreamReceived?: (stream: MediaStream) => void;
   private onStreamEnded?: () => void;
   private onViewerCountChanged?: (count: number) => void;
+
+  // Chat data channels
+  private dataChannels: Map<string, RTCDataChannel> = new Map(); // For streamers (multiple viewers)
+  private remoteDataChannel: RTCDataChannel | null = null; // For viewers (single streamer)
+  private onChatMessage?: (message: any) => void;
+  private onUserJoined?: (user: any) => void;
+  private onUserLeft?: (user: any) => void;
+  private onTypingUpdate?: (userId: string, isTyping: boolean) => void;
 
   // WebRTC Configuration with STUN/TURN servers
   private rtcConfiguration: WebRTCConfig = {
@@ -120,10 +128,18 @@ export class WebRTCStreamingService {
     onStreamReceived?: (stream: MediaStream) => void;
     onStreamEnded?: () => void;
     onViewerCountChanged?: (count: number) => void;
+    onChatMessage?: (message: any) => void;
+    onUserJoined?: (user: any) => void;
+    onUserLeft?: (user: any) => void;
+    onTypingUpdate?: (userId: string, isTyping: boolean) => void;
   }): void {
     this.onStreamReceived = handlers.onStreamReceived;
     this.onStreamEnded = handlers.onStreamEnded;
     this.onViewerCountChanged = handlers.onViewerCountChanged;
+    this.onChatMessage = handlers.onChatMessage;
+    this.onUserJoined = handlers.onUserJoined;
+    this.onUserLeft = handlers.onUserLeft;
+    this.onTypingUpdate = handlers.onTypingUpdate;
   }
 
   // Start streaming (for streamers)
@@ -220,6 +236,12 @@ export class WebRTCStreamingService {
         if (event.streams && event.streams[0] && this.onStreamReceived) {
           this.onStreamReceived(event.streams[0]);
         }
+      };
+
+      // Handle incoming data channel for chat
+      this.remotePeerConnection.ondatachannel = (event) => {
+        console.log('Received data channel:', event);
+        this.handleIncomingDataChannel(event);
       };
       
       // Handle ICE candidates
@@ -403,6 +425,9 @@ export class WebRTCStreamingService {
       // Create new peer connection for this viewer
       const peerConnection = new RTCPeerConnection(this.rtcConfiguration);
       
+      // Set up data channel for chat with this viewer
+      this.setupDataChannel(peerConnection, viewerId);
+      
       // Add local stream tracks
       if (this.localStream) {
         this.localStream.getTracks().forEach(track => {
@@ -561,5 +586,227 @@ export class WebRTCStreamingService {
     }
     
     return stats;
+  }
+
+  // Chat functionality methods
+  
+  // Create data channel for chat (streamer side)
+  private setupDataChannel(peerConnection: RTCPeerConnection, viewerId: string): RTCDataChannel {
+    const dataChannel = peerConnection.createDataChannel('chat', {
+      ordered: true,
+      maxRetransmits: 3
+    });
+
+    dataChannel.onopen = () => {
+      console.log(`Data channel opened for viewer ${viewerId}`);
+      this.dataChannels.set(viewerId, dataChannel);
+    };
+
+    dataChannel.onclose = () => {
+      console.log(`Data channel closed for viewer ${viewerId}`);
+      this.dataChannels.delete(viewerId);
+    };
+
+    dataChannel.onmessage = (event) => {
+      this.handleDataChannelMessage(event.data, viewerId);
+    };
+
+    dataChannel.onerror = (error) => {
+      console.error(`Data channel error for viewer ${viewerId}:`, error);
+    };
+
+    return dataChannel;
+  }
+
+  // Handle incoming data channel (viewer side)
+  private handleIncomingDataChannel(event: RTCDataChannelEvent): void {
+    const dataChannel = event.channel;
+    this.remoteDataChannel = dataChannel;
+
+    dataChannel.onopen = () => {
+      console.log('Data channel opened (viewer)');
+    };
+
+    dataChannel.onclose = () => {
+      console.log('Data channel closed (viewer)');
+      this.remoteDataChannel = null;
+    };
+
+    dataChannel.onmessage = (event) => {
+      this.handleDataChannelMessage(event.data, 'streamer');
+    };
+
+    dataChannel.onerror = (error) => {
+      console.error('Data channel error (viewer):', error);
+    };
+  }
+
+  // Handle data channel messages
+  private handleDataChannelMessage(data: string, senderId: string): void {
+    try {
+      const message = JSON.parse(data);
+      
+      switch (message.type) {
+        case 'chatMessage':
+          // If this is a streamer receiving a message from a viewer, broadcast it to all viewers
+          if (this.isStreamer) {
+            // Broadcast to all viewers (including the original sender)
+            this.dataChannels.forEach((dataChannel, viewerId) => {
+              if (dataChannel.readyState === 'open') {
+                try {
+                  dataChannel.send(data); // Forward the original message
+                } catch (error) {
+                  console.error(`Error forwarding chat message to viewer ${viewerId}:`, error);
+                }
+              }
+            });
+          }
+          // Always trigger the local chat message handler
+          this.onChatMessage?.(message.data);
+          break;
+        case 'userJoined':
+          this.onUserJoined?.(message.data);
+          break;
+        case 'userLeft':
+          this.onUserLeft?.(message.data);
+          break;
+        case 'typing':
+          this.onTypingUpdate?.(senderId, message.data.isTyping);
+          break;
+        default:
+          console.log('Unknown data channel message type:', message.type);
+      }
+    } catch (error) {
+      console.error('Error parsing data channel message:', error);
+    }
+  }
+
+  // Send chat message
+  public sendChatMessage(message: any): void {
+    const chatData = {
+      type: 'chatMessage',
+      data: message,
+      timestamp: Date.now()
+    };
+
+    const messageStr = JSON.stringify(chatData);
+
+    if (this.isStreamer) {
+      // Broadcast to all viewers
+      this.dataChannels.forEach((dataChannel, viewerId) => {
+        if (dataChannel.readyState === 'open') {
+          try {
+            dataChannel.send(messageStr);
+          } catch (error) {
+            console.error(`Error sending chat message to viewer ${viewerId}:`, error);
+          }
+        }
+      });
+      
+      // For streamers, also trigger their own chat message handler directly
+      // since they don't receive their own messages back through data channels
+      this.onChatMessage?.(message);
+    } else if (this.remoteDataChannel && this.remoteDataChannel.readyState === 'open') {
+      // Send to streamer (viewers sending to streamer)
+      try {
+        this.remoteDataChannel.send(messageStr);
+      } catch (error) {
+        console.error('Error sending chat message to streamer:', error);
+      }
+    }
+  }
+
+  // Send typing indicator
+  public sendTypingIndicator(isTyping: boolean): void {
+    const typingData = {
+      type: 'typing',
+      data: { isTyping },
+      timestamp: Date.now()
+    };
+
+    const messageStr = JSON.stringify(typingData);
+
+    if (this.isStreamer) {
+      // Broadcast to all viewers
+      this.dataChannels.forEach((dataChannel, viewerId) => {
+        if (dataChannel.readyState === 'open') {
+          try {
+            dataChannel.send(messageStr);
+          } catch (error) {
+            console.error(`Error sending typing indicator to viewer ${viewerId}:`, error);
+          }
+        }
+      });
+    } else if (this.remoteDataChannel && this.remoteDataChannel.readyState === 'open') {
+      // Send to streamer
+      try {
+        this.remoteDataChannel.send(messageStr);
+      } catch (error) {
+        console.error('Error sending typing indicator to streamer:', error);
+      }
+    }
+  }
+
+  // Send user joined notification
+  public sendUserJoined(user: any): void {
+    const userData = {
+      type: 'userJoined',
+      data: user,
+      timestamp: Date.now()
+    };
+
+    const messageStr = JSON.stringify(userData);
+
+    if (this.isStreamer) {
+      // Broadcast to all viewers
+      this.dataChannels.forEach((dataChannel, viewerId) => {
+        if (dataChannel.readyState === 'open') {
+          try {
+            dataChannel.send(messageStr);
+          } catch (error) {
+            console.error(`Error sending user joined to viewer ${viewerId}:`, error);
+          }
+        }
+      });
+    }
+  }
+
+  // Send user left notification
+  public sendUserLeft(user: any): void {
+    const userData = {
+      type: 'userLeft',
+      data: user,
+      timestamp: Date.now()
+    };
+
+    const messageStr = JSON.stringify(userData);
+
+    if (this.isStreamer) {
+      // Broadcast to all viewers
+      this.dataChannels.forEach((dataChannel, viewerId) => {
+        if (dataChannel.readyState === 'open') {
+          try {
+            dataChannel.send(messageStr);
+          } catch (error) {
+            console.error(`Error sending user left to viewer ${viewerId}:`, error);
+          }
+        }
+      });
+    }
+  }
+
+  // Get data channel status
+  public getDataChannelStatus(): { [key: string]: string } {
+    const status: { [key: string]: string } = {};
+
+    if (this.isStreamer) {
+      this.dataChannels.forEach((dataChannel, viewerId) => {
+        status[viewerId] = dataChannel.readyState;
+      });
+    } else if (this.remoteDataChannel) {
+      status.streamer = this.remoteDataChannel.readyState;
+    }
+
+    return status;
   }
 }

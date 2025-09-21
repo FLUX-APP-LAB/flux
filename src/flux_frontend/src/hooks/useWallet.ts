@@ -10,7 +10,7 @@ export const useWallet = () => {
   const refreshAndSetCurrentUser = async () => {
     const refreshedUser = await walletContext.refreshCurrentUser();
     if (refreshedUser) {
-      setCurrentUser(refreshedUser);
+      await setCurrentUser(refreshedUser);
       return refreshedUser;
     }
     return null;

@@ -11,11 +11,11 @@ export const MobileNavigation: React.FC = () => {
   const location = useLocation();
 
   const navItems = [
-    { id: 'home', path: '/home', icon: Home, label: 'Home' },
-    { id: 'discover', path: '/discover', icon: Search, label: 'Discover' },
-    { id: 'stream-dashboard', path: '/go-live', icon: Zap, label: 'Go Live' },
+    { id: 'home', path: '/app/home', icon: Home, label: 'Home' },
+    { id: 'discover', path: '/app/discover', icon: Search, label: 'Discover' },
+    { id: 'stream-dashboard', path: '/app/go-live', icon: Zap, label: 'Go Live' },
     { id: 'create', path: '', icon: Plus, label: 'Create', isCreate: true },
-    { id: 'profile', path: '/profile', icon: User, label: 'Profile' },
+    { id: 'profile', path: '/app/profile', icon: User, label: 'Profile' },
   ];
 
   const handleNavClick = (item: { id: string; path?: string; isCreate?: boolean }) => {
@@ -27,8 +27,8 @@ export const MobileNavigation: React.FC = () => {
   };
 
   const isActiveRoute = (path: string) => {
-    if (path === '/home') {
-      return location.pathname === '/home' || location.pathname === '/';
+    if (path === '/app/home') {
+      return location.pathname === '/app/home' || location.pathname === '/app';
     }
     return location.pathname.startsWith(path);
   };

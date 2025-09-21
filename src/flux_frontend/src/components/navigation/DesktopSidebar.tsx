@@ -48,24 +48,24 @@ export const DesktopSidebar: React.FC = () => {
   const location = useLocation();
 
   const mainNavItems = [
-    { id: 'home', path: '/home', icon: Home, label: 'Home', badge: null },
-    { id: 'discover', path: '/discover', icon: Search, label: 'Discover', badge: null },
-    { id: 'following', path: '/home', icon: Users, label: 'Following', badge: '12' },
-    { id: 'streams', path: '/streams', icon: Radio, label: 'Live Streams', badge: null },
-    { id: 'stream-dashboard', path: '/go-live', icon: Zap, label: 'Go Live', badge: null },
+    { id: 'home', path: '/app/home', icon: Home, label: 'Home', badge: null },
+    { id: 'discover', path: '/app/discover', icon: Search, label: 'Discover', badge: null },
+    { id: 'following', path: '/app/home', icon: Users, label: 'Following', badge: '12' },
+    { id: 'streams', path: '/app/streams', icon: Radio, label: 'Live Streams', badge: null },
+    { id: 'stream-dashboard', path: '/app/go-live', icon: Zap, label: 'Go Live', badge: null },
   ] as const;
 
   const secondaryNavItems = [
-    { id: 'trending', path: '/trending', icon: TrendingUp, label: 'Trending', badge: null },
-    { id: 'gaming', path: '/gaming', icon: Gamepad2, label: 'Gaming Hub', badge: 'New' },
-    { id: 'rewards', path: '/rewards', icon: Trophy, label: 'Rewards', badge: null },
-    { id: 'saved', path: '/saved', icon: Bookmark, label: 'Saved', badge: null },
+    { id: 'trending', path: '/app/trending', icon: TrendingUp, label: 'Trending', badge: null },
+    { id: 'gaming', path: '/app/gaming', icon: Gamepad2, label: 'Gaming Hub', badge: 'New' },
+    { id: 'rewards', path: '/app/rewards', icon: Trophy, label: 'Rewards', badge: null },
+    { id: 'saved', path: '/app/saved', icon: Bookmark, label: 'Saved', badge: null },
   ] as const;
 
   const bottomNavItems = [
-    { id: 'profile', path: '/profile', icon: User, label: 'Profile', badge: null },
-    { id: 'notifications', path: '/notifications', icon: Bell, label: 'Notifications', badge: '3' },
-    { id: 'settings', path: '/settings', icon: Settings, label: 'Settings', badge: null },
+    { id: 'profile', path: '/app/profile', icon: User, label: 'Profile', badge: null },
+    { id: 'notifications', path: '/app/notifications', icon: Bell, label: 'Notifications', badge: '3' },
+    { id: 'settings', path: '/app/settings', icon: Settings, label: 'Settings', badge: null },
   ] as const;
 
   const handleNavClick = (item: { id: string; path?: string }) => {
@@ -129,7 +129,7 @@ export const DesktopSidebar: React.FC = () => {
           <div className="p-4 border-b border-flux-bg-tertiary">
             <div className="flex items-center space-x-3 mb-4">
               <div 
-                onClick={() => navigate('/profile')}
+                onClick={() => navigate('/app/profile')}
                 className="cursor-pointer hover:opacity-80 transition-opacity"
               >
                 <Avatar 
@@ -162,7 +162,7 @@ export const DesktopSidebar: React.FC = () => {
         {desktopSidebarCollapsed && currentUser && (
           <div className="p-4 border-b border-flux-bg-tertiary flex justify-center">
             <div 
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/app/profile')}
               className="cursor-pointer hover:opacity-80 transition-opacity"
             >
               <Avatar 
@@ -350,7 +350,7 @@ export const DesktopSidebar: React.FC = () => {
             <Button
               variant="secondary"
               className="w-full justify-start"
-              onClick={() => navigate('/wallet')}
+              onClick={() => navigate('/app/wallet')}
             >
               <Wallet className="w-4 h-4 mr-2" />
               {!desktopSidebarCollapsed && 'Wallet'}

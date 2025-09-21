@@ -55,6 +55,10 @@ export class WebRTCStreamingService {
   private onUserLeft?: (user: any) => void;
   private onTypingUpdate?: (userId: string, isTyping: boolean) => void;
 
+  // Queue for messages received before handlers are set
+  private pendingMessages: Array<{type: string, data: any, senderId: string}> = [];
+  private handlersInitialized: boolean = false;
+
   // WebRTC Configuration with STUN/TURN servers
   private rtcConfiguration: WebRTCConfig = {
     iceServers: [
@@ -133,6 +137,8 @@ export class WebRTCStreamingService {
     onUserLeft?: (user: any) => void;
     onTypingUpdate?: (userId: string, isTyping: boolean) => void;
   }): void {
+    console.log('Setting event handlers:', handlers);
+    console.log('onChatMessage handler type:', typeof handlers.onChatMessage);
     this.onStreamReceived = handlers.onStreamReceived;
     this.onStreamEnded = handlers.onStreamEnded;
     this.onViewerCountChanged = handlers.onViewerCountChanged;
@@ -140,12 +146,40 @@ export class WebRTCStreamingService {
     this.onUserJoined = handlers.onUserJoined;
     this.onUserLeft = handlers.onUserLeft;
     this.onTypingUpdate = handlers.onTypingUpdate;
+    this.handlersInitialized = true;
+    console.log('Event handlers set. onChatMessage is now:', typeof this.onChatMessage);
+    
+    // Process any pending messages that arrived before handlers were set
+    if (this.pendingMessages.length > 0) {
+      console.log(`Processing ${this.pendingMessages.length} pending messages`);
+      const messagesToProcess = [...this.pendingMessages];
+      this.pendingMessages = []; // Clear the queue
+      
+      // Process each pending message
+      messagesToProcess.forEach(({type, data, senderId}) => {
+        console.log(`Processing pending message of type: ${type}`);
+        this.processMessage(type, data, senderId);
+      });
+    }
   }
 
   // Start streaming (for streamers)
   public async startStreaming(title: string, description: string, category: string): Promise<string | null> {
     try {
       console.log('Starting streaming process...');
+      
+      // Prevent multiple concurrent streaming attempts
+      if (this.isStreamer && this.currentSessionId) {
+        console.log('Already streaming with session:', this.currentSessionId);
+        return this.currentSessionId;
+      }
+
+      if (this.isConnecting) {
+        console.log('Already connecting, ignoring duplicate startStreaming call');
+        return null;
+      }
+
+      this.isConnecting = true;
       
       // Get user media first
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -176,6 +210,7 @@ export class WebRTCStreamingService {
       if ('ok' in result) {
         this.currentSessionId = streamId;
         this.isStreamer = true;
+        this.isConnecting = false;
         
         console.log('WebRTC stream created successfully:', streamId);
         
@@ -185,11 +220,13 @@ export class WebRTCStreamingService {
         return streamId;
       } else {
         console.error('Failed to create WebRTC stream:', result.err);
+        this.isConnecting = false;
         this.cleanup();
         return null;
       }
     } catch (error) {
       console.error('Error starting stream:', error);
+      this.isConnecting = false;
       this.cleanup();
       return null;
     }
@@ -229,6 +266,45 @@ export class WebRTCStreamingService {
       
       // Create peer connection for receiving stream
       this.remotePeerConnection = new RTCPeerConnection(this.rtcConfiguration);
+      
+      // CRITICAL: Viewer must create data channel BEFORE creating offer
+      // This ensures data channel is included in the offer SDP
+      console.log('Viewer creating data channel before offer...');
+      try {
+        const dataChannel = this.remotePeerConnection.createDataChannel('chat', {
+          ordered: true,
+          maxRetransmits: 3
+        });
+        
+        console.log('Viewer data channel created, state:', dataChannel.readyState);
+        
+        dataChannel.onopen = () => {
+          console.log('Viewer data channel opened');
+          this.remoteDataChannel = dataChannel;
+        };
+        
+        dataChannel.onclose = () => {
+          console.log('Viewer data channel closed');
+          this.remoteDataChannel = null;
+        };
+        
+        dataChannel.onmessage = (event) => {
+          console.log('Viewer received message via data channel:', event.data);
+          this.handleDataChannelMessage(event.data, 'streamer');
+        };
+        
+        dataChannel.onerror = (error) => {
+          console.error('Viewer data channel error:', error);
+        };
+        
+        // Store the data channel reference immediately
+        this.remoteDataChannel = dataChannel;
+        console.log('Viewer data channel stored successfully');
+        
+      } catch (error) {
+        console.error('Error creating viewer data channel:', error);
+        throw error;
+      }
       
       // Handle incoming stream
       this.remotePeerConnection.ontrack = (event) => {
@@ -270,6 +346,17 @@ export class WebRTCStreamingService {
       await this.remotePeerConnection.setLocalDescription(offer);
       
       console.log('Created offer:', offer);
+      
+      // Debug: Check if offer includes data channel
+      if (offer.sdp) {
+        const hasDataChannel = offer.sdp.includes('m=application');
+        console.log(`Viewer offer SDP includes data channel: ${hasDataChannel}`);
+        if (hasDataChannel) {
+          console.log('Data channel should be negotiated with streamer');
+        } else {
+          console.warn('Viewer offer does not include data channel!');
+        }
+      }
       
       // Join stream on backend with offer
       const result = await this.actor.joinStream(streamId, JSON.stringify(offer));
@@ -384,6 +471,16 @@ export class WebRTCStreamingService {
         const answer = this.safeJsonParse<RTCSessionDescriptionInit>(answerData, 'answer');
         if (answer && this.remotePeerConnection && this.remotePeerConnection.signalingState === 'have-local-offer') {
           console.log('Received answer:', answer);
+          
+          // Debug: Check if answer includes data channel
+          if (answer.sdp) {
+            const hasDataChannel = answer.sdp.includes('m=application');
+            console.log(`Answer SDP includes data channel: ${hasDataChannel}`);
+            if (!hasDataChannel) {
+              console.warn('Answer does not include data channel - data channel will not work');
+            }
+          }
+          
           await this.remotePeerConnection.setRemoteDescription(answer);
         }
       }
@@ -425,9 +522,6 @@ export class WebRTCStreamingService {
       // Create new peer connection for this viewer
       const peerConnection = new RTCPeerConnection(this.rtcConfiguration);
       
-      // Set up data channel for chat with this viewer
-      this.setupDataChannel(peerConnection, viewerId);
-      
       // Add local stream tracks
       if (this.localStream) {
         this.localStream.getTracks().forEach(track => {
@@ -442,16 +536,53 @@ export class WebRTCStreamingService {
           await this.sendIceCandidateToViewer(viewerId, event.candidate);
         }
       };
+
+      // Handle ICE connection state for monitoring
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log(`ICE connection state with ${viewerId}:`, peerConnection.iceConnectionState);
+      };
       
       // Handle connection state
       peerConnection.onconnectionstatechange = () => {
         console.log(`Connection state with ${viewerId}:`, peerConnection.connectionState);
-        if (peerConnection.connectionState === 'disconnected' || 
+        if (peerConnection.connectionState === 'connected') {
+          // Check if data channel opened
+          console.log(`Peer connection established with ${viewerId}, checking data channels...`);
+          this.checkDataChannelStatus(viewerId);
+        } else if (peerConnection.connectionState === 'disconnected' || 
             peerConnection.connectionState === 'failed') {
           this.localPeerConnections.delete(viewerId);
           this.updateViewerCount();
         }
       };
+      
+      // Handle incoming data channel from viewer
+      peerConnection.ondatachannel = (event) => {
+        console.log(`Streamer received data channel from viewer ${viewerId}:`, event.channel);
+        const dataChannel = event.channel;
+        
+        dataChannel.onopen = () => {
+          console.log(`Data channel opened from viewer ${viewerId}`);
+          this.dataChannels.set(viewerId, dataChannel);
+          console.log(`Data channels count after open: ${this.dataChannels.size}`);
+        };
+
+        dataChannel.onclose = () => {
+          console.log(`Data channel closed from viewer ${viewerId}`);
+          this.dataChannels.delete(viewerId);
+          console.log(`Data channels count after close: ${this.dataChannels.size}`);
+        };
+
+        dataChannel.onmessage = (event) => {
+          this.handleDataChannelMessage(event.data, viewerId);
+        };
+
+        dataChannel.onerror = (error) => {
+          console.error(`Data channel error from viewer ${viewerId}:`, error);
+        };
+      };
+      
+      console.log('Streamer ready to receive data channel from viewer...');
       
       // Set remote description and create answer
       await peerConnection.setRemoteDescription(offer);
@@ -459,6 +590,17 @@ export class WebRTCStreamingService {
       await peerConnection.setLocalDescription(answer);
       
       console.log('Created answer for viewer:', viewerId);
+      
+      // Debug: Check if data channel is in the SDP
+      if (answer.sdp) {
+        const hasDataChannel = answer.sdp.includes('m=application');
+        console.log(`Answer SDP includes data channel: ${hasDataChannel}`);
+        if (hasDataChannel) {
+          console.log('Data channel should be negotiated with viewer');
+        } else {
+          console.warn('Data channel NOT found in SDP - this is the problem!');
+        }
+      }
       
       // Send answer to viewer
       const result = await this.actor.sendAnswer({
@@ -551,6 +693,8 @@ export class WebRTCStreamingService {
     this.currentSessionId = null;
     this.isStreamer = false;
     this.isConnecting = false;
+    this.handlersInitialized = false;
+    this.pendingMessages = [];
   }
 
   // Public cleanup method
@@ -592,19 +736,31 @@ export class WebRTCStreamingService {
   
   // Create data channel for chat (streamer side)
   private setupDataChannel(peerConnection: RTCPeerConnection, viewerId: string): RTCDataChannel {
+    console.log(`Creating data channel for viewer ${viewerId}, peer connection state: ${peerConnection.connectionState}`);
+    
     const dataChannel = peerConnection.createDataChannel('chat', {
       ordered: true,
       maxRetransmits: 3
     });
 
+    console.log(`Data channel created for viewer ${viewerId}, initial state: ${dataChannel.readyState}`);
+
+    // Store the data channel immediately, even before it opens
+    // We'll track its state changes
+    const tempChannelMap = new Map();
+    tempChannelMap.set(viewerId, dataChannel);
+    console.log(`Storing data channel reference for ${viewerId} (state: ${dataChannel.readyState})`);
+
     dataChannel.onopen = () => {
-      console.log(`Data channel opened for viewer ${viewerId}`);
+      console.log(`Data channel opened for viewer ${viewerId}, setting in map`);
       this.dataChannels.set(viewerId, dataChannel);
+      console.log(`Data channels count after open: ${this.dataChannels.size}`);
     };
 
     dataChannel.onclose = () => {
       console.log(`Data channel closed for viewer ${viewerId}`);
       this.dataChannels.delete(viewerId);
+      console.log(`Data channels count after close: ${this.dataChannels.size}`);
     };
 
     dataChannel.onmessage = (event) => {
@@ -615,16 +771,25 @@ export class WebRTCStreamingService {
       console.error(`Data channel error for viewer ${viewerId}:`, error);
     };
 
+    // Set up a timeout to check if the data channel opens within a reasonable time
+    setTimeout(() => {
+      console.log(`Data channel timeout check for ${viewerId}: state = ${dataChannel.readyState}`);
+      if (dataChannel.readyState !== 'open') {
+        console.warn(`Data channel for ${viewerId} did not open within 10 seconds. Current state: ${dataChannel.readyState}`);
+      }
+    }, 10000);
+
     return dataChannel;
   }
 
   // Handle incoming data channel (viewer side)
   private handleIncomingDataChannel(event: RTCDataChannelEvent): void {
     const dataChannel = event.channel;
+    console.log(`Incoming data channel received (viewer), label: ${dataChannel.label}, state: ${dataChannel.readyState}`);
     this.remoteDataChannel = dataChannel;
 
     dataChannel.onopen = () => {
-      console.log('Data channel opened (viewer)');
+      console.log('Data channel opened (viewer) - chat is now ready');
     };
 
     dataChannel.onclose = () => {
@@ -643,41 +808,76 @@ export class WebRTCStreamingService {
 
   // Handle data channel messages
   private handleDataChannelMessage(data: string, senderId: string): void {
+    console.log(`Handling data channel message from ${senderId}:`, data);
     try {
       const message = JSON.parse(data);
+      console.log(`Parsed message type: ${message.type}`, message);
       
-      switch (message.type) {
-        case 'chatMessage':
-          // If this is a streamer receiving a message from a viewer, broadcast it to all viewers
-          if (this.isStreamer) {
-            // Broadcast to all viewers (including the original sender)
-            this.dataChannels.forEach((dataChannel, viewerId) => {
-              if (dataChannel.readyState === 'open') {
-                try {
-                  dataChannel.send(data); // Forward the original message
-                } catch (error) {
-                  console.error(`Error forwarding chat message to viewer ${viewerId}:`, error);
-                }
-              }
-            });
-          }
-          // Always trigger the local chat message handler
-          this.onChatMessage?.(message.data);
-          break;
-        case 'userJoined':
-          this.onUserJoined?.(message.data);
-          break;
-        case 'userLeft':
-          this.onUserLeft?.(message.data);
-          break;
-        case 'typing':
-          this.onTypingUpdate?.(senderId, message.data.isTyping);
-          break;
-        default:
-          console.log('Unknown data channel message type:', message.type);
+      // If handlers are not initialized yet, queue the message
+      if (!this.handlersInitialized) {
+        console.log('Handlers not initialized yet, queueing message');
+        this.pendingMessages.push({
+          type: message.type,
+          data: message.data,
+          senderId: senderId
+        });
+        return;
       }
+
+      // Process the message immediately
+      this.processMessage(message.type, message.data, senderId);
     } catch (error) {
       console.error('Error parsing data channel message:', error);
+    }
+  }
+
+  // Process individual message types
+  private processMessage(type: string, data: any, senderId: string): void {
+    console.log(`Processing message type: ${type} from ${senderId}`);
+    
+    switch (type) {
+      case 'chatMessage':
+        console.log(`Processing chat message from ${senderId}`, data);
+        // If this is a streamer receiving a message from a viewer, broadcast it to all viewers
+        if (this.isStreamer) {
+          console.log(`Streamer broadcasting message to ${this.dataChannels.size} viewers`);
+          // Broadcast to all viewers (including the original sender)
+          this.dataChannels.forEach((dataChannel, viewerId) => {
+            if (dataChannel.readyState === 'open') {
+              try {
+                const messageToForward = {
+                  type: 'chatMessage',
+                  data: data,
+                  timestamp: Date.now()
+                };
+                dataChannel.send(JSON.stringify(messageToForward)); // Forward the original message
+                console.log(`Forwarded message to viewer ${viewerId}`);
+              } catch (error) {
+                console.error(`Error forwarding chat message to viewer ${viewerId}:`, error);
+              }
+            }
+          });
+        } else {
+          console.log('Viewer received chat message');
+        }
+        // Always trigger the local chat message handler
+        console.log('Triggering onChatMessage callback');
+        console.log('onChatMessage exists:', !!this.onChatMessage);
+        console.log('Message data being passed:', data);
+        console.log('onChatMessage function:', this.onChatMessage);
+        this.onChatMessage?.(data);
+        break;
+      case 'userJoined':
+        this.onUserJoined?.(data);
+        break;
+      case 'userLeft':
+        this.onUserLeft?.(data);
+        break;
+      case 'typing':
+        this.onTypingUpdate?.(senderId, data.isTyping);
+        break;
+      default:
+        console.log('Unknown data channel message type:', type);
     }
   }
 
@@ -690,29 +890,47 @@ export class WebRTCStreamingService {
     };
 
     const messageStr = JSON.stringify(chatData);
+    console.log('Attempting to send chat message:', message);
+    console.log('WebRTC service state - isStreamer:', this.isStreamer, 'dataChannels count:', this.dataChannels.size);
 
     if (this.isStreamer) {
       // Broadcast to all viewers
+      let sentCount = 0;
       this.dataChannels.forEach((dataChannel, viewerId) => {
+        console.log(`Data channel to ${viewerId} state:`, dataChannel.readyState);
         if (dataChannel.readyState === 'open') {
           try {
             dataChannel.send(messageStr);
+            sentCount++;
+            console.log(`Successfully sent message to viewer ${viewerId}`);
           } catch (error) {
             console.error(`Error sending chat message to viewer ${viewerId}:`, error);
           }
+        } else {
+          console.warn(`Data channel to ${viewerId} not open: ${dataChannel.readyState}`);
         }
       });
+      
+      console.log(`Sent message to ${sentCount} out of ${this.dataChannels.size} viewers`);
       
       // For streamers, also trigger their own chat message handler directly
       // since they don't receive their own messages back through data channels
       this.onChatMessage?.(message);
-    } else if (this.remoteDataChannel && this.remoteDataChannel.readyState === 'open') {
-      // Send to streamer (viewers sending to streamer)
-      try {
-        this.remoteDataChannel.send(messageStr);
-      } catch (error) {
-        console.error('Error sending chat message to streamer:', error);
+    } else if (this.remoteDataChannel) {
+      console.log('Viewer data channel state:', this.remoteDataChannel.readyState);
+      if (this.remoteDataChannel.readyState === 'open') {
+        // Send to streamer (viewers sending to streamer)
+        try {
+          this.remoteDataChannel.send(messageStr);
+          console.log('Successfully sent message to streamer');
+        } catch (error) {
+          console.error('Error sending chat message to streamer:', error);
+        }
+      } else {
+        console.warn(`Data channel to streamer not open: ${this.remoteDataChannel.readyState}`);
       }
+    } else {
+      console.error('No data channels available for sending chat message');
     }
   }
 
@@ -808,5 +1026,55 @@ export class WebRTCStreamingService {
     }
 
     return status;
+  }
+
+  // Check data channel status for debugging
+  private checkDataChannelStatus(viewerId: string): void {
+    // Find any data channels associated with this peer connection
+    const peerConnection = this.localPeerConnections.get(viewerId);
+    if (peerConnection) {
+      console.log(`Checking data channels for viewer ${viewerId}:`);
+      console.log(`- Data channels in map: ${this.dataChannels.size}`);
+      console.log(`- Data channel for this viewer exists: ${this.dataChannels.has(viewerId)}`);
+      
+      if (this.dataChannels.has(viewerId)) {
+        const dataChannel = this.dataChannels.get(viewerId)!;
+        console.log(`- Data channel state: ${dataChannel.readyState}`);
+      } else {
+        console.log(`- No data channel found in map for viewer ${viewerId}`);
+        console.log(`- This suggests the data channel never opened`);
+      }
+    }
+  }
+
+  // Check if chat is ready
+  public isChatReady(): boolean {
+    if (this.isStreamer) {
+      // For streamers, chat is ready if at least one data channel is open
+      for (const [viewerId, dataChannel] of this.dataChannels) {
+        if (dataChannel.readyState === 'open') {
+          return true;
+        }
+      }
+      return false;
+    } else {
+      // For viewers, chat is ready if the remote data channel is open
+      return this.remoteDataChannel?.readyState === 'open';
+    }
+  }
+
+  // Get connection info for debugging
+  public getConnectionInfo(): { 
+    isStreamer: boolean; 
+    dataChannelsCount: number; 
+    dataChannelStatus: { [key: string]: string };
+    sessionId: string | null;
+  } {
+    return {
+      isStreamer: this.isStreamer,
+      dataChannelsCount: this.isStreamer ? this.dataChannels.size : (this.remoteDataChannel ? 1 : 0),
+      dataChannelStatus: this.getDataChannelStatus(),
+      sessionId: this.currentSessionId
+    };
   }
 }

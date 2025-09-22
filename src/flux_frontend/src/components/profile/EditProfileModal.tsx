@@ -134,7 +134,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       if (result) {
         toast.success('Profile updated successfully!');
         if (currentUser) {
-          setCurrentUser({
+          await setCurrentUser({
             ...currentUser,
             displayName: formData.displayName,
             avatar: formData.avatar,

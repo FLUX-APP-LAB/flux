@@ -20,7 +20,7 @@ export const MainLayout: React.FC = () => {
       {/* Main Content */}
       <div className={`transition-all duration-300 ${
         desktopSidebarCollapsed ? 'lg:ml-[80px]' : 'lg:ml-[280px]'
-      } md:ml-0`}>
+      } md:ml-0 md:pt-16 lg:pt-0 pb-16 md:pb-0`}>
         <AnimatePresence mode="wait">
           <motion.div
             initial={{ opacity: 0, y: 20 }}

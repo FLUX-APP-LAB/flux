@@ -271,15 +271,19 @@ export const LandingPage: React.FC = () => {
                 className="text-center lg:text-left"
               >
                 <motion.h1 
+
                   key={currentHeroIndex} // Re-animate on slide change
                   className="text-5xl lg:text-7xl font-black text-white leading-[0.9] tracking-tight mb-8"
+
                   initial={{ opacity: 0, y: 20 }} 
                   animate={{ opacity: 1, y: 0 }} 
                   transition={{ delay: 0.3, duration: 0.8 }}
                 >
+
                   {heroSlides[currentHeroIndex].title}
                   <span className="block bg-gradient-to-r from-[#8a2be2] via-[#9932cc] to-[#8b5cf6] bg-clip-text text-transparent">
                     {heroSlides[currentHeroIndex].subtitle}
+
                   </span>
                   <span className="block text-slate-200">{heroSlides[currentHeroIndex].accent}</span>
                 </motion.h1>

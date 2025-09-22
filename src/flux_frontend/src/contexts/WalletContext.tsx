@@ -110,7 +110,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   // Helper to fetch and set current user in store
   const fetchAndSetCurrentUser = async (userPrincipal: string) => {
     const user = await getUser(userPrincipal);
-    if (user) setCurrentUser(user);
+    if (user) await setCurrentUser(user);
     return user;
   };
 
@@ -357,11 +357,11 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
                   : [],
             };
 
-            setCurrentUser(frontendUser);
+            await setCurrentUser(frontendUser);
           } else {
             // No existing user; keep currentUser null to trigger signup in App
             console.log('No existing user profile found for principal:', principalIdFull);
-            setCurrentUser(null);
+            await setCurrentUser(null);
           }
         }
       } catch (e) {
@@ -475,7 +475,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       authUtils.clearAuthState();
       
       // Clear app store state
-      setCurrentUser(null);
+      await setCurrentUser(null);
       setAuthenticated(false);
       setWalletAddress(null);
       setAppPrincipal(null);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ActorSubclass } from '@dfinity/agent';
 import { Button } from '../ui/Button';
 import { StreamPlayer } from '../stream/WebRTCStreamPlayer';
+import { LiveChat } from '../stream/LiveChat';
 import { WebRTCStreamingService } from '../../lib/webrtcStreamingService';
 import { useAppStore } from '../../store/appStore';
 import { useWallet } from '../../hooks/useWallet';
@@ -12,7 +13,7 @@ interface LiveStreamListProps {
 }
 
 export const LiveStreamList: React.FC<LiveStreamListProps> = ({ className }) => {
-  const { activeStreams, setActiveStreams } = useAppStore();
+  const { activeStreams, setActiveStreams, currentUser, addChatMessage } = useAppStore();
   const { newAuthActor } = useWallet();
   const [webrtcService, setWebrtcService] = useState<WebRTCStreamingService | null>(null);
   
@@ -66,6 +67,32 @@ export const LiveStreamList: React.FC<LiveStreamListProps> = ({ className }) => 
         if (viewingStreamId && viewingStream) {
           updateStream(viewingStreamId, { ...viewingStream, viewers: count });
         }
+      },
+      onChatMessage: (message: any) => {
+        addLog(`Chat message from ${message.displayName}: ${message.message}`);
+        if (viewingStreamId && currentUser) {
+          addChatMessage(viewingStreamId, {
+            id: message.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            userId: message.userId,
+            username: message.username,
+            displayName: message.displayName,
+            avatar: message.avatar,
+            message: message.message,
+            timestamp: new Date(message.timestamp),
+            badges: message.badges,
+            messageType: message.messageType || 'normal'
+          });
+        }
+      },
+      onUserJoined: (user: any) => {
+        addLog(`${user.displayName} joined the stream`);
+      },
+      onUserLeft: (user: any) => {
+        addLog(`${user.displayName} left the stream`);
+      },
+      onTypingUpdate: (userId: string, isTyping: boolean) => {
+        // Handle typing indicators
+        // addLog(`User ${userId} ${isTyping ? 'started' : 'stopped'} typing`);
       }
     });
 
@@ -194,6 +221,31 @@ export const LiveStreamList: React.FC<LiveStreamListProps> = ({ className }) => 
     setViewingStreamId(null);
   };
 
+  const handleSendChatMessage = (messageText: string) => {
+    if (!webrtcService || !currentUser || !viewingStreamId) {
+      addLog('Cannot send message: missing service, user, or stream');
+      return;
+    }
+
+    // Create message object
+    const chatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      userId: currentUser.id,
+      username: currentUser.username,
+      displayName: currentUser.displayName,
+      avatar: currentUser.avatar,
+      message: messageText,
+      timestamp: Date.now(),
+      badges: currentUser.tier ? [currentUser.tier] : undefined,
+      messageType: 'normal'
+    };
+
+    // Send through WebRTC data channel - it will come back through onChatMessage
+    webrtcService.sendChatMessage(chatMessage);
+
+    addLog(`Sent message: ${messageText}`);
+  };
+
   const clearLogs = () => {
     setConnectionLogs([]);
   };
@@ -314,38 +366,54 @@ export const LiveStreamList: React.FC<LiveStreamListProps> = ({ className }) => 
               </Button>
             </div>
             
-            <div className="border border-gray-700 rounded-xl overflow-hidden" style={{ backgroundColor: '#1a1a1a' }}>
-              {webrtcService ? (
-                <StreamPlayer
-                  stream={viewingStream}
-                  mode="viewer"
-                  webrtcService={webrtcService}
-                  className="h-96"
-                  onConnectionStatusChange={(status) => {
-                    setConnectionStatus(status);
-                    addLog(`Connection status: ${status}`);
-                  }}
-                />
-              ) : (
-                <div className="h-96 flex items-center justify-center text-gray-400">
-                  <div className="text-center">
-                    <div className="w-8 h-8 border-2 border-gray-400/30 border-t-gray-400 rounded-full animate-spin mx-auto mb-2"></div>
-                    <p>Initializing WebRTC service...</p>
-                  </div>
+            {/* Stream and Chat Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Video Player */}
+              <div className="lg:col-span-2">
+                <div className="border border-gray-700 rounded-xl overflow-hidden" style={{ backgroundColor: '#1a1a1a' }}>
+                  {webrtcService ? (
+                    <StreamPlayer
+                      stream={viewingStream}
+                      mode="viewer"
+                      webrtcService={webrtcService}
+                      className="h-96 lg:h-[500px]"
+                      onConnectionStatusChange={(status) => {
+                        setConnectionStatus(status);
+                        addLog(`Connection status: ${status}`);
+                      }}
+                    />
+                  ) : (
+                    <div className="h-96 lg:h-[500px] flex items-center justify-center text-gray-400">
+                      <div className="text-center">
+                        <div className="w-8 h-8 border-2 border-gray-400/30 border-t-gray-400 rounded-full animate-spin mx-auto mb-2"></div>
+                        <p>Initializing WebRTC service...</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="mt-3 flex items-center gap-4 text-sm text-gray-300">
-              <div className="flex items-center gap-1">
-                <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                </svg>
-                <span>{viewingStream.viewers} viewers</span>
+                <div className="mt-3 flex items-center gap-4 text-sm text-gray-300">
+                  <div className="flex items-center gap-1">
+                    <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                      <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                    </svg>
+                    <span>{viewingStream.viewers} viewers</span>
+                  </div>
+                  <span>•</span>
+                  <span>Streamed by {viewingStream.creator.displayName}</span>
+                </div>
               </div>
-              <span>•</span>
-              <span>Streamed by {viewingStream.creator.displayName}</span>
+
+              {/* Live Chat */}
+              <div className="lg:col-span-1">
+                <LiveChat
+                  streamId={viewingStream.id}
+                  onSendMessage={handleSendChatMessage}
+                  className="h-96 lg:h-[500px]"
+                  isStreamer={false}
+                />
+              </div>
             </div>
           </div>
         )}

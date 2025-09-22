@@ -1,11 +1,20 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { LiveStreamDemo } from './LiveStreamDemo';
 import { useWallet } from '../../hooks/useWallet';
 
 export const LiveStreamPage: React.FC = () => {
   const { newAuthActor } = useWallet();
+  const stableActorRef = useRef(newAuthActor);
   
-  if (!newAuthActor) {
+  // Only update the stable actor ref when we get a valid actor for the first time
+  useEffect(() => {
+    if (newAuthActor && !stableActorRef.current) {
+      console.log('LiveStreamPage: Setting stable actor reference');
+      stableActorRef.current = newAuthActor;
+    }
+  }, [newAuthActor]);
+  
+  if (!stableActorRef.current) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -16,5 +25,5 @@ export const LiveStreamPage: React.FC = () => {
     );
   }
 
-  return <LiveStreamDemo actor={newAuthActor} />;
+  return <LiveStreamDemo actor={stableActorRef.current} />;
 };

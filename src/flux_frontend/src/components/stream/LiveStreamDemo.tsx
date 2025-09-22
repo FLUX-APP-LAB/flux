@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ActorSubclass } from '@dfinity/agent';
 import { Button } from '../ui/Button';
 import { StreamPlayer } from './WebRTCStreamPlayer';
+import { LiveChat } from './LiveChat';
 import { WebRTCStreamingService } from '../../lib/webrtcStreamingService';
 import { useAppStore } from '../../store/appStore';
 import type { LiveStream } from '../../store/appStore';
@@ -12,8 +13,31 @@ interface LiveStreamingProps {
 }
 
 export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className }) => {
-  const { currentUser, activeStreams, setActiveStreams } = useAppStore();
-  const [webrtcService] = useState(() => new WebRTCStreamingService(actor));
+  console.log('LiveStreamDemo component rendering/re-rendering');
+  const { currentUser, activeStreams, setActiveStreams, addChatMessage, chatRooms, initializeChatRoom } = useAppStore();
+  
+  // Use useRef instead of useState to prevent recreation on re-renders
+  const webrtcServiceRef = useRef<WebRTCStreamingService | null>(null);
+  
+  // Initialize WebRTC service only once
+  if (!webrtcServiceRef.current) {
+    console.log('Creating new WebRTCStreamingService instance');
+    webrtcServiceRef.current = new WebRTCStreamingService(actor);
+    console.log('WebRTCStreamingService instance created:', webrtcServiceRef.current);
+  }  const webrtcService = webrtcServiceRef.current;
+
+  // Add effect to detect when component unmounts
+  useEffect(() => {
+    console.log('LiveStreamDemo mounted');
+    return () => {
+      console.log('LiveStreamDemo unmounting - this causes webrtcService cleanup');
+      // Only cleanup on actual unmount
+      if (webrtcServiceRef.current) {
+        webrtcServiceRef.current.disconnect();
+        webrtcServiceRef.current = null;
+      }
+    };
+  }, []);
   
   // Stream state
   const [isStreaming, setIsStreaming] = useState(false);
@@ -48,9 +72,17 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
     setActiveStreams(activeStreams.map(s => s.id === streamId ? { ...s, ...updates } : s));
   };
 
+  // Set up WebRTC service event handlers - update when dependencies change
   useEffect(() => {
-    // Set up WebRTC service event handlers
-    webrtcService.setEventHandlers({
+    if (!webrtcServiceRef.current) {
+      console.log('webrtcServiceRef.current is null in useEffect');
+      return;
+    }
+    
+    console.log('Setting event handlers on webrtcServiceRef.current:', webrtcServiceRef.current);
+    console.log('Current dependencies - currentUser:', !!currentUser, 'currentStreamId:', currentStreamId, 'viewingStreamId:', viewingStreamId);
+    
+    webrtcServiceRef.current.setEventHandlers({
       onStreamReceived: (stream: MediaStream) => {
         addLog('Stream received from broadcaster');
         setConnectionStatus('connected');
@@ -63,17 +95,83 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
         setViewerCount(count);
         addLog(`Viewer count updated: ${count}`);
         
-        // Update stream in store
-        if (currentStreamId && currentStream) {
-          updateStream(currentStreamId, { ...currentStream, viewers: count });
+        // Update stream in store using current values
+        if (currentStreamId) {
+          const stream = activeStreams.find(s => s.id === currentStreamId);
+          if (stream) {
+            updateStream(currentStreamId, { ...stream, viewers: count });
+          }
         }
+        if (viewingStreamId) {
+          const stream = activeStreams.find(s => s.id === viewingStreamId);
+          if (stream) {
+            updateStream(viewingStreamId, { ...stream, viewers: count });
+          }
+        }
+      },
+      onChatMessage: (message: any) => {
+        console.log('LiveStreamDemo: Received chat message via WebRTC:', message);
+        console.log('LiveStreamDemo: Message structure:', JSON.stringify(message, null, 2));
+        
+        // Get the actual current session ID from the WebRTC service
+        const connectionInfo = webrtcServiceRef.current?.getConnectionInfo();
+        const sessionId = connectionInfo?.sessionId;
+        const reactStreamId = currentStreamId || viewingStreamId;
+        
+        console.log('LiveStreamDemo: WebRTC session ID:', sessionId);
+        console.log('LiveStreamDemo: React state streamId:', reactStreamId);
+        console.log('LiveStreamDemo: Current user:', currentUser);
+        
+        addLog(`Chat message from ${message.displayName}: ${message.message}`);
+        
+        // Use the WebRTC session ID as the authoritative source
+        const streamId = sessionId || reactStreamId;
+        
+        // Add all messages received through WebRTC
+        if (streamId && currentUser) {
+          console.log(`Adding message to chat room ${streamId}:`, {
+            id: message.id,
+            userId: message.userId,
+            displayName: message.displayName,
+            message: message.message
+          });
+          
+          console.log('Before calling addChatMessage');
+          console.log('Available addChatMessage function:', typeof addChatMessage);
+          console.log('Chat rooms before adding message:', chatRooms);
+          
+          addChatMessage(streamId, {
+            id: message.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            userId: message.userId,
+            username: message.username,
+            displayName: message.displayName,
+            avatar: message.avatar,
+            message: message.message,
+            timestamp: new Date(message.timestamp),
+            badges: message.badges,
+            messageType: message.messageType || 'normal'
+          });
+          
+          console.log('After calling addChatMessage');
+          console.log('Chat rooms after adding message:', chatRooms);
+        } else {
+          console.log('Cannot add message - missing streamId or currentUser:', { streamId, currentUser: !!currentUser });
+        }
+      },
+      onUserJoined: (user: any) => {
+        addLog(`${user.displayName} joined the stream`);
+      },
+      onUserLeft: (user: any) => {
+        addLog(`${user.displayName} left the stream`);
+      },
+      onTypingUpdate: (userId: string, isTyping: boolean) => {
+        // Handle typing indicators
+        // addLog(`User ${userId} ${isTyping ? 'started' : 'stopped'} typing`);
       }
     });
-
-    return () => {
-      webrtcService.disconnect();
-    };
-  }, []);
+    console.log('LiveStreamDemo: Event handlers have been set on webrtcServiceRef.current');
+    console.log('LiveStreamDemo: WebRTC service instance:', webrtcServiceRef.current);
+  }, [currentUser, currentStreamId, viewingStreamId, activeStreams, addChatMessage, chatRooms]); // Update when these dependencies change
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -91,6 +189,17 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
       return;
     }
 
+    // Prevent multiple simultaneous calls
+    if (connectionStatus === 'connecting' || isStreaming) {
+      addLog('Stream already starting or active');
+      return;
+    }
+
+    if (!webrtcServiceRef.current) {
+      addLog('Error: WebRTC service not available');
+      return;
+    }
+
     try {
       setConnectionStatus('connecting');
       addLog('Starting stream...');
@@ -105,6 +214,9 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
         setCurrentStreamId(streamId);
         setIsStreaming(true);
         setConnectionStatus('connected');
+        
+        // Initialize chat room for the stream
+        initializeChatRoom(streamId);
         
         // Add stream to global store
         const newStream: LiveStream = {
@@ -170,13 +282,19 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
       return;
     }
 
+    if (!webrtcServiceRef.current) {
+      addLog('Error: WebRTC service not available');
+      return;
+    }
+
     try {
       setConnectionStatus('connecting');
       addLog(`Joining stream: ${viewingStreamId}`);
       
-      // Instead of calling webrtcService.joinStream directly,
-      // we'll set up the stream and let StreamPlayer auto-connect
       setIsViewing(true);
+      
+      // Initialize chat room for the stream
+      initializeChatRoom(viewingStreamId);
       
       // Try to find existing stream in store or create placeholder
       let stream = activeStreams.find(s => s.id === viewingStreamId);
@@ -199,14 +317,16 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
         addStream(stream);
       }
       
-      // Set the viewing stream ID so the StreamPlayer component can auto-connect
-      setViewingStreamId(stream.id);
-      addLog('Stream setup complete, connecting...');
+      // Actually call the WebRTC service to join the stream
+      addLog('Initiating WebRTC connection...');
+      await webrtcService.joinStream(viewingStreamId);
       
     } catch (error) {
       console.error('Error setting up stream:', error);
       setConnectionStatus('error');
-      addLog('Failed to setup stream');
+      setIsViewing(false);
+      const errorMsg = (error instanceof Error) ? error.message : JSON.stringify(error);
+      addLog(`Failed to join stream: ${errorMsg}`);
     }
   };
 
@@ -214,6 +334,7 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
     addLog('Leaving stream...');
     webrtcService.disconnect();
     setIsViewing(false);
+    setViewingStreamId('');
     setConnectionStatus('disconnected');
     addLog('Left stream');
   };
@@ -226,6 +347,81 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
     }
     setConnectionStatus('disconnected');
     setIsViewing(false);
+  };
+
+  const handleSendChatMessage = (messageText: string) => {
+    if (!currentUser) {
+      addLog('Cannot send message: user not authenticated');
+      return;
+    }
+
+    // Get the authoritative stream ID from WebRTC service
+    const connectionInfo = webrtcService.getConnectionInfo();
+    const sessionId = connectionInfo?.sessionId;
+    const reactStreamId = currentStreamId || viewingStreamId;
+    const streamId = sessionId || reactStreamId;
+    
+    if (!streamId) {
+      addLog('Cannot send message: no active stream');
+      return;
+    }
+
+    // Check WebRTC connection status
+    const isChatReady = webrtcService.isChatReady();
+    console.log('WebRTC Connection Info:', connectionInfo);
+    console.log('Is chat ready:', isChatReady);
+    addLog(`Connection status - Streaming: ${isStreaming}, Viewing: ${isViewing}, Data channels: ${connectionInfo.dataChannelsCount}, Chat ready: ${isChatReady}`);
+
+    // Warn if no connections available
+    if (isStreaming && connectionInfo.dataChannelsCount === 0) {
+      addLog('Warning: No viewers connected to receive chat messages');
+      addLog('Note: For testing, your message will still appear locally');
+    } else if (isViewing && !isChatReady) {
+      addLog('Warning: Not connected to streamer, message may not be delivered');
+    }
+
+    // Create message object
+    const chatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      userId: currentUser.id,
+      username: currentUser.username,
+      displayName: currentUser.displayName,
+      avatar: currentUser.avatar,
+      message: messageText,
+      timestamp: Date.now(),
+      badges: currentUser.tier ? [currentUser.tier] : undefined,
+      messageType: 'normal' as const
+    };
+
+    // Log the message being sent for debugging
+    addLog(`Sending chat message: ${messageText} (ID: ${chatMessage.id})`);
+    console.log('Sending chat message:', chatMessage);
+    console.log('Data channel status:', connectionInfo.dataChannelStatus);
+
+    try {
+      // Send through WebRTC data channel - it will come back through onChatMessage
+      webrtcService.sendChatMessage(chatMessage);
+      addLog(`Message sent successfully via WebRTC`);
+
+      // FOR TESTING: If no viewers are connected, add the message locally so you can see it
+      if (isStreaming && connectionInfo.dataChannelsCount === 0) {
+        addLog('Adding message locally for testing (no viewers connected)');
+        addChatMessage(streamId, {
+          id: chatMessage.id,
+          userId: chatMessage.userId,
+          username: chatMessage.username,
+          displayName: chatMessage.displayName,
+          avatar: chatMessage.avatar,
+          message: chatMessage.message,
+          timestamp: new Date(chatMessage.timestamp),
+          badges: chatMessage.badges,
+          messageType: chatMessage.messageType
+        });
+      }
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+      addLog(`Error sending message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const clearLogs = () => {
@@ -411,8 +607,8 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
               </div>
             </div>
 
-            {/* Viewer Section
-            <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 p-6">
+            {/* Viewer Section */}
+            <div className="backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 p-6" style={{ backgroundColor: '#1a1a1a' }}>
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -462,44 +658,72 @@ export const LiveStreamDemo: React.FC<LiveStreamingProps> = ({ actor, className 
                   )}
                 </div>
               </div>
-            </div> */}
+            </div>
           </div>
 
-          {/* Video Player Section */}
+          {/* Video Player and Chat Section */}
           <div className="space-y-6">
-            {/* Streamer Video Player */}
+            {/* Streamer Video Player with Chat */}
             {currentStream && isStreaming && (
-              <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 overflow-hidden">
+              <div className="backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 overflow-hidden" style={{ backgroundColor: '#1a1a1a' }}>
                 <div className="p-4 border-b border-gray-800">
                   <h3 className="font-semibold text-white">Your Stream Preview</h3>
                 </div>
-                <StreamPlayer
-                  stream={currentStream}
-                  mode="streamer"
-                  webrtcService={webrtcService}
-                  className="aspect-video"
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
+                  {/* Video Player */}
+                  <div className="lg:col-span-2">
+                    <StreamPlayer
+                      stream={currentStream}
+                      mode="streamer"
+                      webrtcService={webrtcService}
+                      className="h-64 lg:h-80"
+                    />
+                  </div>
+                  {/* Live Chat */}
+                  <div className="lg:col-span-1">
+                    <LiveChat
+                      streamId={currentStream.id}
+                      onSendMessage={handleSendChatMessage}
+                      className="h-64 lg:h-80"
+                      isStreamer={true}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Viewer Video Player
+            {/* Viewer Video Player with Chat */}
             {viewingStream && isViewing && (
-              <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 overflow-hidden">
+              <div className="backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 overflow-hidden" style={{ backgroundColor: '#1a1a1a' }}>
                 <div className="p-4 border-b border-gray-800">
                   <h3 className="font-semibold text-white">Watching: {viewingStream.title}</h3>
                 </div>
-                <StreamPlayer
-                  stream={viewingStream}
-                  mode="viewer"
-                  webrtcService={webrtcService}
-                  className="aspect-video"
-                  onConnectionStatusChange={(status) => {
-                    setConnectionStatus(status);
-                    addLog(`Connection status: ${status}`);
-                  }}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
+                  {/* Video Player */}
+                  <div className="lg:col-span-2">
+                    <StreamPlayer
+                      stream={viewingStream}
+                      mode="viewer"
+                      webrtcService={webrtcService}
+                      className="h-64 lg:h-80"
+                      onConnectionStatusChange={(status) => {
+                        setConnectionStatus(status);
+                        addLog(`Connection status: ${status}`);
+                      }}
+                    />
+                  </div>
+                  {/* Live Chat */}
+                  <div className="lg:col-span-1">
+                    <LiveChat
+                      streamId={viewingStream.id}
+                      onSendMessage={handleSendChatMessage}
+                      className="h-64 lg:h-80"
+                      isStreamer={false}
+                    />
+                  </div>
+                </div>
               </div>
-            )} */}
+            )}
 
             {/* Connection Logs */}
             <div className="backdrop-blur-xl rounded-2xl shadow-xl border border-gray-800 p-6" style={{ backgroundColor: '#1a1a1a' }}>

@@ -9,7 +9,7 @@ export const ProtectedRoute: React.FC = () => {
 
   // If not authenticated, redirect to landing page
   if (!isAuthenticated) {
-    return <Navigate to="/landing" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // If authenticated but no user profile, redirect to signup

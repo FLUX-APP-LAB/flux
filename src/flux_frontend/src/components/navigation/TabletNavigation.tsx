@@ -36,23 +36,23 @@ export const TabletNavigation: React.FC = () => {
   const location = useLocation();
 
   const mainNavItems = [
-    { id: 'home', path: '/home', icon: Home, label: 'Home', badge: null },
-    { id: 'discover', path: '/discover', icon: Search, label: 'Discover', badge: null },
-    { id: 'following', path: '/home', icon: Users, label: 'Following', badge: '12' },
-    { id: 'streams', path: '/streams', icon: Radio, label: 'Live Streams', badge: null },
+    { id: 'home', path: '/app/home', icon: Home, label: 'Home', badge: null },
+    { id: 'discover', path: '/app/discover', icon: Search, label: 'Discover', badge: null },
+    { id: 'following', path: '/app/home', icon: Users, label: 'Following', badge: '12' },
+    { id: 'streams', path: '/app/streams', icon: Radio, label: 'Live Streams', badge: null },
   ] as const;
 
   const secondaryNavItems = [
-    { id: 'trending', path: '/trending', icon: TrendingUp, label: 'Trending', badge: null },
-    { id: 'gaming', path: '/gaming', icon: Gamepad2, label: 'Gaming Hub', badge: 'New' },
-    { id: 'rewards', path: '/rewards', icon: Trophy, label: 'Rewards', badge: null },
-    { id: 'saved', path: '/saved', icon: Bookmark, label: 'Saved', badge: null },
+    { id: 'trending', path: '/app/trending', icon: TrendingUp, label: 'Trending', badge: null },
+    { id: 'gaming', path: '/app/gaming', icon: Gamepad2, label: 'Gaming Hub', badge: 'New' },
+    { id: 'rewards', path: '/app/rewards', icon: Trophy, label: 'Rewards', badge: null },
+    { id: 'saved', path: '/app/saved', icon: Bookmark, label: 'Saved', badge: null },
   ] as const;
 
   const bottomNavItems = [
-    { id: 'profile', path: '/profile', icon: User, label: 'Profile', badge: null },
-    { id: 'notifications', path: '/notifications', icon: Bell, label: 'Notifications', badge: '3' },
-    { id: 'settings', path: '/settings', icon: Settings, label: 'Settings', badge: null },
+    { id: 'profile', path: '/app/profile', icon: User, label: 'Profile', badge: null },
+    { id: 'notifications', path: '/app/notifications', icon: Bell, label: 'Notifications', badge: '3' },
+    { id: 'settings', path: '/app/settings', icon: Settings, label: 'Settings', badge: null },
   ] as const;
 
   const handleNavClick = (item: { id: string; path?: string }) => {
@@ -67,13 +67,13 @@ export const TabletNavigation: React.FC = () => {
   const handleLogout = async () => {
     await disconnectWallet();
     setAuthenticated(false);
-    setCurrentUser(null);
-    navigate('/landing');
+    await setCurrentUser(null);
+    navigate('/');
   };
 
   const isActiveRoute = (path: string) => {
-    if (path === '/home') {
-      return location.pathname === '/home' || location.pathname === '/';
+    if (path === '/app/home') {
+      return location.pathname === '/app/home' || location.pathname === '/app/following';
     }
     return location.pathname.startsWith(path);
   };
@@ -127,7 +127,7 @@ export const TabletNavigation: React.FC = () => {
             {/* Profile */}
             {currentUser && (
               <button 
-                onClick={() => navigate('/profile')}
+                onClick={() => navigate('/app/profile')}
                 className="flex items-center space-x-2 p-2 rounded-lg hover:bg-flux-bg-tertiary"
               >
                 <Avatar src={currentUser.avatar} alt={currentUser.displayName} size="sm" />
@@ -243,7 +243,7 @@ export const TabletNavigation: React.FC = () => {
                 <Button
                   variant="secondary"
                   className="w-full justify-start"
-                  onClick={() => navigate('/wallet')}
+                  onClick={() => navigate('/app/wallet')}
                 >
                   <Wallet className="w-4 h-4 mr-2" />
                   Wallet

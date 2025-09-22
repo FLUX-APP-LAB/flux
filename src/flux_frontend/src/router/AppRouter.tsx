@@ -46,11 +46,35 @@ function AuthNavigationHandler({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   
   useEffect(() => {
-    // Only handle navigation if we have determined auth state
-    if (isAuthenticated && !currentUser) {
-      // User is authenticated but has no profile - redirect to signup
-      console.log('Authenticated user without profile, redirecting to signup');
-      navigate('/signup', { replace: true });
+    console.log('AuthNavigationHandler effect:', { 
+      isAuthenticated, 
+      currentUser: currentUser ? 'exists' : currentUser === null ? 'null' : 'undefined',
+      currentUserData: currentUser,
+      currentPath: window.location.pathname
+    });
+    
+    // ONLY handle navigation if user data is fully loaded (not undefined)
+    if (currentUser === undefined) {
+      console.log('User data still loading, skipping navigation logic');
+      return;
+    }
+    
+    if (isAuthenticated && currentUser !== undefined) {
+      if (currentUser === null) {
+        // User is authenticated but has no profile - redirect to signup
+        console.log('Authenticated user without profile, redirecting to signup');
+        navigate('/signup', { replace: true });
+      } else if (currentUser && window.location.pathname === '/signup') {
+        // User has profile but is on signup page - redirect to app
+        console.log('Authenticated user with profile on signup page, redirecting to app');
+        navigate('/app/home', { replace: true });
+      }
+    }
+    
+    // Handle unauthenticated users on protected routes
+    if (!isAuthenticated && window.location.pathname.startsWith('/app')) {
+      console.log('Not authenticated but on protected route, redirecting to landing');
+      navigate('/', { replace: true });
     }
   }, [isAuthenticated, currentUser, navigate]);
   
@@ -62,15 +86,25 @@ function AuthAwareRedirect() {
   const { isAuthenticated } = useWallet();
   const { currentUser } = useAppStore();
   
+  console.log('AuthAwareRedirect:', { 
+    isAuthenticated, 
+    currentUser: currentUser ? 'exists' : currentUser === null ? 'null' : 'undefined' 
+  });
+  
+  // Wait for currentUser to be determined before any navigation
+  if (isAuthenticated && currentUser === undefined) {
+    console.log('Still loading user data, waiting...');
+    return null; // Don't navigate until we know the user state
+  }
+  
   if (isAuthenticated && currentUser) {
-    return <Navigate to="/home" replace />;
-  } else if (isAuthenticated && currentUser === undefined) {
-    // Still fetching currentUser, don't navigate yet
-    return null;
-  } else if (isAuthenticated && !currentUser) {
+    return <Navigate to="/app/home" replace />;
+  } else if (isAuthenticated && currentUser === null) {
+    console.log('Authenticated user with no profile, redirecting to signup');
     return <Navigate to="/signup" replace />;
   } else {
-    return <Navigate to="/landing" replace />;
+    console.log('Not authenticated, staying on current page');
+    return null; // Don't redirect unauthenticated users
   }
 }
 
@@ -82,13 +116,13 @@ export const AppRouter: React.FC = () => {
       <AuthNavigationHandler>
         <Routes>
           {/* Public routes */}
-          <Route path="/landing" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/signup" element={<SignupPage onBack={() => window.history.back()} />} />
           
           {/* Protected routes with main layout */}
-          <Route path="/" element={<ProtectedRoute />}>
+          <Route path="/app" element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
-              <Route index element={<Navigate to="/home" replace />} />
+              <Route index element={<Navigate to="/app/home" replace />} />
               <Route path="home" element={<HomeFeed />} />
               <Route path="discover" element={<DiscoverScreen />} />
               <Route path="profile" element={<UserProfile />} />

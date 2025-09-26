@@ -35,8 +35,8 @@ export const MobileNavigation: React.FC = () => {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 bg-flux-bg-secondary/95 backdrop-blur-lg border-t border-flux-bg-tertiary z-50 md:hidden">
-        <div className="flex items-center justify-around py-2 px-4">
+      <div className="fixed bottom-0 left-0 right-0 bg-flux-bg-secondary/98 backdrop-blur-lg border-t border-flux-bg-tertiary z-50 md:hidden safe-area-pb">
+        <div className="flex items-center justify-around py-3 px-2">
           {navItems.map((item) => (
             <motion.button
               key={item.id}
@@ -44,19 +44,19 @@ export const MobileNavigation: React.FC = () => {
               whileTap={{ scale: 0.95 }}
               onClick={() => handleNavClick(item)}
               className={cn(
-                "flex flex-col items-center space-y-1 p-2 rounded-lg transition-colors",
+                "flex flex-col items-center space-y-1 p-2 rounded-lg transition-colors min-w-[60px]",
                 item.isCreate
-                  ? "bg-flux-gradient text-white"
+                  ? "bg-flux-gradient text-white shadow-lg"
                   : item.path && isActiveRoute(item.path)
-                  ? "text-flux-primary"
-                  : "text-flux-text-secondary hover:text-flux-text-primary"
+                  ? "text-flux-primary bg-flux-primary/10"
+                  : "text-flux-text-secondary hover:text-flux-text-primary hover:bg-flux-bg-tertiary/50"
               )}
             >
               <item.icon className={cn(
-                "w-6 h-6",
-                item.isCreate && "w-7 h-7"
+                "w-5 h-5",
+                item.isCreate && "w-6 h-6"
               )} />
-              <span className="text-xs font-medium">{item.label}</span>
+              <span className="text-xs font-medium leading-tight">{item.label}</span>
             </motion.button>
           ))}
         </div>

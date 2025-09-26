@@ -266,17 +266,17 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
         <div
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
-          className="border-2 border-dashed border-flux-bg-tertiary rounded-xl p-12 text-center hover:border-flux-primary transition-colors cursor-pointer"
+          className="border-2 border-dashed border-flux-bg-tertiary rounded-xl p-6 md:p-12 text-center hover:border-flux-primary transition-colors cursor-pointer"
           onClick={() => fileInputRef.current?.click()}
         >
-          <Upload className="w-12 h-12 text-flux-text-secondary mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-flux-text-primary mb-2">
+          <Upload className="w-8 h-8 md:w-12 md:h-12 text-flux-text-secondary mx-auto mb-3 md:mb-4" />
+          <h3 className="text-base md:text-lg font-semibold text-flux-text-primary mb-2">
             Upload your video
           </h3>
-          <p className="text-flux-text-secondary mb-4">
+          <p className="text-sm md:text-base text-flux-text-secondary mb-3 md:mb-4">
             Drag and drop your video here, or click to browse
           </p>
-          <p className="text-sm text-flux-text-secondary">
+          <p className="text-xs md:text-sm text-flux-text-secondary">
             Supports MP4, MOV, AVI up to 100MB
           </p>
           <input
@@ -291,7 +291,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
         /* Upload Progress Screen */
         <div className="space-y-6">
           {/* Video Preview - Smaller during upload */}
-          <div className="relative aspect-[9/16] max-w-xs mx-auto bg-black rounded-xl overflow-hidden">
+          <div className="relative aspect-[9/16] max-w-[200px] md:max-w-xs mx-auto bg-black rounded-xl overflow-hidden">
             <video
               ref={videoRef}
               src={videoPreview!}
@@ -303,15 +303,15 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             
             {/* Upload Overlay */}
             <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-              <div className="text-center text-white p-6">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                <h3 className="text-lg font-semibold mb-2">
+              <div className="text-center text-white p-4 md:p-6">
+                <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-white mx-auto mb-3 md:mb-4"></div>
+                <h3 className="text-base md:text-lg font-semibold mb-2">
                   {uploadStatus === 'uploading' && 'Uploading Video...'}
                   {uploadStatus === 'processing' && 'Processing Video...'}
                   {uploadStatus === 'complete' && 'Upload Complete!'}
                   {uploadStatus === 'error' && 'Upload Failed'}
                 </h3>
-                <p className="text-sm opacity-90 mb-4">
+                <p className="text-xs md:text-sm opacity-90 mb-3 md:mb-4">
                   {uploadStatus === 'uploading' && 'Converting and uploading your video to the blockchain'}
                   {uploadStatus === 'processing' && 'Your video is being processed and will be available soon'}
                   {uploadStatus === 'complete' && 'Your video has been successfully published'}
@@ -322,20 +322,20 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
           </div>
 
           {/* Upload Progress Details */}
-          <div className="bg-flux-bg-tertiary rounded-xl p-6 space-y-4">
+          <div className="bg-flux-bg-tertiary rounded-xl p-4 md:p-6 space-y-3 md:space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-flux-text-primary">
+              <h4 className="text-base md:text-lg font-semibold text-flux-text-primary truncate mr-4">
                 {title || 'Untitled Video'}
               </h4>
-              <span className="text-2xl font-bold text-flux-primary">
+              <span className="text-xl md:text-2xl font-bold text-flux-primary flex-shrink-0">
                 {uploadProgress}%
               </span>
             </div>
             
             {/* Progress Bar */}
-            <div className="w-full bg-flux-bg-primary rounded-full h-3">
+            <div className="w-full bg-flux-bg-primary rounded-full h-2 md:h-3">
               <motion.div
-                className={`h-3 rounded-full ${
+                className={`h-2 md:h-3 rounded-full ${
                   uploadStatus === 'error' ? 'bg-red-500' : 
                   uploadStatus === 'complete' ? 'bg-green-500' : 
                   'bg-flux-gradient'
@@ -347,56 +347,60 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
             </div>
 
             {/* Status Steps */}
-            <div className="flex items-center justify-between text-sm">
-              <div className={`flex items-center space-x-2 ${
+            <div className="flex items-center justify-between text-xs md:text-sm">
+              <div className={`flex items-center space-x-1 md:space-x-2 ${
                 uploadProgress >= 20 ? 'text-flux-primary' : 'text-flux-text-secondary'
               }`}>
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${
                   uploadProgress >= 20 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
                 }`}></div>
-                <span>Converting</span>
+                <span className="hidden sm:inline">Converting</span>
+                <span className="sm:hidden">Conv</span>
               </div>
               
-              <div className={`flex items-center space-x-2 ${
+              <div className={`flex items-center space-x-1 md:space-x-2 ${
                 uploadProgress >= 40 ? 'text-flux-primary' : 'text-flux-text-secondary'
               }`}>
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${
                   uploadProgress >= 40 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
                 }`}></div>
-                <span>Thumbnail</span>
+                <span className="hidden sm:inline">Thumbnail</span>
+                <span className="sm:hidden">Thumb</span>
               </div>
               
-              <div className={`flex items-center space-x-2 ${
+              <div className={`flex items-center space-x-1 md:space-x-2 ${
                 uploadProgress >= 60 ? 'text-flux-primary' : 'text-flux-text-secondary'
               }`}>
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${
                   uploadProgress >= 60 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
                 }`}></div>
-                <span>Uploading</span>
+                <span className="hidden sm:inline">Uploading</span>
+                <span className="sm:hidden">Upload</span>
               </div>
               
-              <div className={`flex items-center space-x-2 ${
+              <div className={`flex items-center space-x-1 md:space-x-2 ${
                 uploadProgress >= 100 ? 'text-flux-primary' : 'text-flux-text-secondary'
               }`}>
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${
                   uploadProgress >= 100 ? 'bg-flux-primary' : 'bg-flux-text-secondary'
                 }`}></div>
-                <span>Complete</span>
+                <span className="hidden sm:inline">Complete</span>
+                <span className="sm:hidden">Done</span>
               </div>
             </div>
 
             {/* Video Info During Upload */}
             {videoMetadata && (
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-flux-bg-primary">
+              <div className="grid grid-cols-2 gap-3 md:gap-4 pt-3 md:pt-4 border-t border-flux-bg-primary">
                 <div className="text-center">
                   <span className="block text-xs text-flux-text-secondary">Duration</span>
-                  <span className="text-sm font-medium text-flux-text-primary">
+                  <span className="text-xs md:text-sm font-medium text-flux-text-primary">
                     {formatDuration(videoMetadata.duration)}
                   </span>
                 </div>
                 <div className="text-center">
                   <span className="block text-xs text-flux-text-secondary">Size</span>
-                  <span className="text-sm font-medium text-flux-text-primary">
+                  <span className="text-xs md:text-sm font-medium text-flux-text-primary">
                     {formatFileSize(selectedFile.size)}
                   </span>
                 </div>
@@ -405,7 +409,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
 
             {/* Current Action */}
             <div className="text-center pt-2">
-              <p className="text-sm text-flux-text-secondary">
+              <p className="text-xs md:text-sm text-flux-text-secondary">
                 {uploadProgress < 10 && "Preparing video file..."}
                 {uploadProgress >= 10 && uploadProgress < 20 && "Generating thumbnail..."}
                 {uploadProgress >= 20 && uploadProgress < 90 && "Uploading video chunks..."}
@@ -473,7 +477,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
       ) : (
         <div className="space-y-6">
           {/* Video Preview */}
-          <div className="relative aspect-[9/16] max-w-xs mx-auto bg-black rounded-xl overflow-hidden">
+          <div className="relative aspect-[9/16] max-w-[250px] md:max-w-xs mx-auto bg-black rounded-xl overflow-hidden">
             <video
               ref={videoRef}
               src={videoPreview!}
@@ -583,7 +587,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({ onClose }) => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex space-x-3">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
             <Button
               variant="secondary"
               onClick={onClose}

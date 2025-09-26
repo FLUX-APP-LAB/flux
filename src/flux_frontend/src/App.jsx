@@ -50,7 +50,7 @@ function AppContent() {
           duration: 3000,
           style: {
             background: 'var(--flux-bg-secondary)',
-            color: 'var(--flux-text-primary)',
+            color: '#ffffff',
             border: '1px solid var(--flux-bg-tertiary)',
           },
         }}

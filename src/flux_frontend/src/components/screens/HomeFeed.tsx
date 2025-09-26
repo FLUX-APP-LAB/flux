@@ -92,8 +92,8 @@ export const HomeFeed: React.FC = () => {
     <div className="h-screen bg-flux-bg-primary overflow-hidden">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/60 to-transparent">
-        <div className="flex items-center justify-between p-4 pt-12">
-          <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-between p-3 md:p-4 pt-8 md:pt-12">
+          <div className="flex items-center space-x-2 md:space-x-4">
             {feedTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -107,7 +107,7 @@ export const HomeFeed: React.FC = () => {
                     setActivePage('home');
                   }
                 }}
-                className={`text-white font-semibold transition-all duration-200 ${
+                className={`text-white font-semibold transition-all duration-200 text-sm md:text-base ${
                   feedType === tab.id
                     ? 'text-white border-b-2 border-white pb-1'
                     : 'text-white/70 hover:text-white'
@@ -118,14 +118,14 @@ export const HomeFeed: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center space-x-3">
-            <Button size="sm" variant="ghost">
-              <Search className="w-5 h-5 text-white" />
+          <div className="flex items-center space-x-2 md:space-x-3">
+            <Button size="sm" variant="ghost" className="p-2">
+              <Search className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </Button>
-            <Button size="sm" variant="ghost">
-              <Bell className="w-5 h-5 text-white" />
+            <Button size="sm" variant="ghost" className="p-2">
+              <Bell className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </Button>
-            <button onClick={() => setActivePage('profile')}>
+            <button onClick={() => setActivePage('profile')} className="p-1">
               {currentUser ? (
                 <Avatar
                   src={currentUser.avatar}
@@ -133,7 +133,7 @@ export const HomeFeed: React.FC = () => {
                   size="sm"
                 />
               ) : (
-                <User className="w-5 h-5 text-white" />
+                <User className="w-4 h-4 md:w-5 md:h-5 text-white" />
               )}
             </button>
           </div>
@@ -178,7 +178,7 @@ export const HomeFeed: React.FC = () => {
 
       {/* Loading indicator for infinite scroll */}
       {!isLoading && videoFeed.length > 0 && (
-        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 text-white/50 text-sm">
+        <div className="absolute bottom-24 md:bottom-20 left-1/2 transform -translate-x-1/2 text-white/50 text-xs md:text-sm bg-black/30 px-2 py-1 rounded-full">
           {currentVideoIndex + 1} / {videoFeed.length}
         </div>
       )}

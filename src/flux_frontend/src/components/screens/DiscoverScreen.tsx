@@ -160,18 +160,18 @@ export const DiscoverScreen: React.FC = () => {
     <div className="min-h-screen bg-flux-bg-primary pb-20">
       {/* Header */}
       <div className="sticky top-0 bg-flux-bg-primary/95 backdrop-blur-lg border-b border-flux-bg-tertiary z-10">
-        <div className="p-4 pt-12">
-          <h1 className="text-2xl font-bold text-flux-text-primary mb-4">Discover</h1>
+        <div className="p-3 md:p-4 pt-8 md:pt-12">
+          <h1 className="text-xl md:text-2xl font-bold text-flux-text-primary mb-3 md:mb-4">Discover</h1>
           
           {/* Search Bar */}
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-flux-text-secondary" />
+          <div className="relative mb-3 md:mb-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-flux-text-secondary" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search videos, creators, hashtags..."
-              className="w-full pl-10 pr-4 py-3 bg-flux-bg-secondary text-flux-text-primary rounded-xl focus:outline-none focus:ring-2 focus:ring-flux-primary"
+              className="w-full pl-9 md:pl-10 pr-4 py-2.5 md:py-3 bg-flux-bg-secondary text-flux-text-primary text-sm md:text-base rounded-xl focus:outline-none focus:ring-2 focus:ring-flux-primary"
             />
           </div>
 
@@ -181,14 +181,14 @@ export const DiscoverScreen: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-md transition-colors ${
+                className={`flex-1 flex items-center justify-center space-x-1 md:space-x-2 py-2 px-2 md:px-3 rounded-md transition-colors ${
                   activeTab === tab.id
                     ? 'bg-flux-primary text-white'
                     : 'text-flux-text-secondary hover:text-flux-text-primary'
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
-                <span className="text-sm font-medium">{tab.label}</span>
+                <span className="text-xs md:text-sm font-medium">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -196,7 +196,7 @@ export const DiscoverScreen: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="p-3 md:p-4">
         {/* Search Results */}
         {searchQuery.trim() && (
           <div className="mb-6">
@@ -298,7 +298,7 @@ export const DiscoverScreen: React.FC = () => {
                     <h2 className="text-lg font-semibold text-flux-text-primary mb-4">
                       Trending Videos
                     </h2>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                       {trendingVideos.map((video, index) => (
                         <motion.div
                           key={video.id}

@@ -82,14 +82,14 @@ export const TabletNavigation: React.FC = () => {
     <>
       {/* Tablet Header Navigation */}
       <div className="hidden md:flex lg:hidden fixed top-0 left-0 right-0 h-16 bg-flux-bg-secondary border-b border-flux-bg-tertiary z-50">
-        <div className="flex items-center justify-between w-full px-6">
+        <div className="flex items-center justify-between w-full px-4 md:px-6">
           {/* Logo */}
-          <div className="text-xl font-bold bg-flux-gradient bg-clip-text text-transparent">
+          <div className="text-lg md:text-xl font-bold bg-flux-gradient bg-clip-text text-transparent">
             FLUX
           </div>
 
-          {/* Main Navigation */}
-          <nav className="flex items-center space-x-6">
+          {/* Main Navigation - Hidden on smaller tablets */}
+          <nav className="hidden xl:flex items-center space-x-6">
             {mainNavItems.map((item) => (
               <button
                 key={item.id}
@@ -112,16 +112,39 @@ export const TabletNavigation: React.FC = () => {
             ))}
           </nav>
 
+          {/* Simplified Navigation for smaller tablets */}
+          <nav className="flex xl:hidden items-center space-x-2">
+            {mainNavItems.slice(0, 3).map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item)}
+                className={cn(
+                  "flex items-center p-2 rounded-lg transition-colors",
+                  isActiveRoute(item.path)
+                    ? "bg-flux-primary text-white"
+                    : "text-flux-text-secondary hover:text-flux-text-primary hover:bg-flux-bg-tertiary"
+                )}
+              >
+                <item.icon className="w-4 h-4" />
+                {item.badge && (
+                  <span className="absolute -top-1 -right-1 bg-flux-accent-red text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+
           {/* Right Section */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 md:space-x-4">
             {/* Create Button */}
             <Button
               onClick={() => setShowCreateModal(true)}
               size="sm"
-              className="bg-flux-gradient hover:opacity-90 text-white"
+              className="bg-flux-gradient hover:opacity-90 text-white px-2 md:px-4"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              Create
+              <Plus className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">Create</span>
             </Button>
 
             {/* Profile */}
@@ -139,8 +162,9 @@ export const TabletNavigation: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2"
             >
-              {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </Button>
           </div>
         </div>

@@ -162,52 +162,55 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4 pb-24 md:pb-4"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-flux-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
+          className="bg-flux-bg-secondary rounded-2xl w-full max-w-2xl max-h-[80vh] md:max-h-[90vh] overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-flux-bg-tertiary">
-            <h2 className="text-xl font-bold text-flux-text-primary">Edit Profile</h2>
+          <div className="flex items-center justify-between p-4 md:p-6 border-b border-flux-bg-tertiary flex-shrink-0">
+            <h2 className="text-lg md:text-xl font-bold text-flux-text-primary">Edit Profile</h2>
             <Button size="sm" variant="ghost" onClick={onClose}>
               <X className="w-5 h-5" />
             </Button>
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex border-b border-flux-bg-tertiary">
+          <div className="flex border-b border-flux-bg-tertiary flex-shrink-0">
             <button
               onClick={() => setActiveTab('profile')}
-              className={`flex-1 py-4 px-6 text-sm font-medium transition-colors ${
+              className={`flex-1 py-3 md:py-4 px-3 md:px-6 text-sm font-medium transition-colors ${
                 activeTab === 'profile'
                   ? 'text-flux-primary border-b-2 border-flux-primary bg-flux-primary/5'
                   : 'text-flux-text-secondary hover:text-flux-text-primary'
               }`}
             >
-              Profile Information
+              <span className="hidden sm:inline">Profile Information</span>
+              <span className="sm:hidden">Profile</span>
             </button>
             <button
               onClick={() => setActiveTab('privacy')}
-              className={`flex-1 py-4 px-6 text-sm font-medium transition-colors ${
+              className={`flex-1 py-3 md:py-4 px-3 md:px-6 text-sm font-medium transition-colors ${
                 activeTab === 'privacy'
                   ? 'text-flux-primary border-b-2 border-flux-primary bg-flux-primary/5'
                   : 'text-flux-text-secondary hover:text-flux-text-primary'
               }`}
             >
-              Privacy & Security
+              <span className="hidden sm:inline">Privacy & Security</span>
+              <span className="sm:hidden">Privacy</span>
             </button>
           </div>
 
           {/* Content */}
-          <div className="p-6 overflow-y-auto max-h-[60vh]">
-            {activeTab === 'profile' && (
-              <div className="space-y-6">
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="p-4 md:p-6">
+              {activeTab === 'profile' && (
+                <div className="space-y-4 md:space-y-6">
                 {/* Banner Upload */}
                 <div>
                   <label className="block text-sm font-medium text-flux-text-primary mb-2">
@@ -305,8 +308,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   <label className="block text-sm font-medium text-flux-text-primary mb-2">
                     Profile Picture
                   </label>
-                  <div className="flex items-center space-x-4">
-                    <div className="relative group">
+                  <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                    <div className="relative group self-center sm:self-start">
                       <Avatar
                         src={formData.avatar}
                         alt={formData.displayName}
@@ -321,13 +324,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col space-y-2">
+                    <div className="flex flex-col space-y-2 w-full sm:w-auto">
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={() => handleFileSelect('avatar')}
                         disabled={isUploadingAvatar}
                         isLoading={isUploadingAvatar}
+                        className="w-full sm:w-auto"
                       >
                         <Upload className="w-4 h-4 mr-2" />
                         {isUploadingAvatar ? 'Uploading...' : 'Upload Photo'}
@@ -337,6 +341,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         variant="secondary"
                         onClick={() => handleImageUpload('avatar')}
                         disabled={isUploadingAvatar}
+                        className="w-full sm:w-auto"
                       >
                         <Image className="w-4 h-4 mr-2" />
                         Random Photo
@@ -560,14 +565,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 </div>
               </div>
             )}
+            </div>
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end space-x-3 p-6 border-t border-flux-bg-tertiary">
-            <Button variant="secondary" onClick={onClose}>
+          <div className="flex items-center justify-end space-x-3 p-4 md:p-6 border-t border-flux-bg-tertiary flex-shrink-0 bg-flux-bg-secondary">
+            <Button variant="secondary" onClick={onClose} size="sm" className="px-4">
               Cancel
             </Button>
-            <Button onClick={handleSave} isLoading={isLoading}>
+            <Button onClick={handleSave} isLoading={isLoading} size="sm" className="px-6">
               <Save className="w-4 h-4 mr-2" />
               {isLoading ? 'Saving...' : 'Save Changes'}
             </Button>

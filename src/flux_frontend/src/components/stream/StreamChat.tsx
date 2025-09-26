@@ -13,11 +13,53 @@ interface StreamChatProps {
 }
 
 const mockMessages: ChatMessage[] = [
-  { id: '1', username: 'viewer1', message: 'Amazing stream! 🔥', timestamp: new Date(), badges: ['subscriber'] },
-  { id: '2', username: 'viewer2', message: 'Can you show that again?', timestamp: new Date() },
-  { id: '3', username: 'viewer3', message: 'First time here, loving it!', timestamp: new Date() },
-  { id: '4', username: 'viewer4', message: 'GG! 🎮', timestamp: new Date(), badges: ['moderator'] },
-  { id: '5', username: 'viewer5', message: 'How long have you been streaming?', timestamp: new Date() },
+  { 
+    id: '1', 
+    userId: 'user1',
+    username: 'viewer1', 
+    displayName: 'Viewer One',
+    avatar: '/default-avatar.png',
+    message: 'Amazing stream! 🔥', 
+    timestamp: new Date(), 
+    badges: ['subscriber'] 
+  },
+  { 
+    id: '2', 
+    userId: 'user2',
+    username: 'viewer2', 
+    displayName: 'Viewer Two',
+    avatar: '/default-avatar.png',
+    message: 'Can you show that again?', 
+    timestamp: new Date() 
+  },
+  { 
+    id: '3', 
+    userId: 'user3',
+    username: 'viewer3', 
+    displayName: 'Viewer Three',
+    avatar: '/default-avatar.png',
+    message: 'First time here, loving it!', 
+    timestamp: new Date() 
+  },
+  { 
+    id: '4', 
+    userId: 'user4',
+    username: 'viewer4', 
+    displayName: 'Viewer Four',
+    avatar: '/default-avatar.png',
+    message: 'GG! 🎮', 
+    timestamp: new Date(), 
+    badges: ['moderator'] 
+  },
+  { 
+    id: '5', 
+    userId: 'user5',
+    username: 'viewer5', 
+    displayName: 'Viewer Five',
+    avatar: '/default-avatar.png',
+    message: 'How long have you been streaming?', 
+    timestamp: new Date() 
+  },
 ];
 
 export const StreamChat: React.FC<StreamChatProps> = ({ streamId, className }) => {
@@ -34,7 +76,10 @@ export const StreamChat: React.FC<StreamChatProps> = ({ streamId, className }) =
     if (messageInput.trim()) {
       const newMessage: ChatMessage = {
         id: Date.now().toString(),
+        userId: 'current-user',
         username: 'currentuser',
+        displayName: 'Current User',
+        avatar: '/default-avatar.png',
         message: messageInput,
         timestamp: new Date(),
       };

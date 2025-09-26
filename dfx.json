@@ -2,7 +2,8 @@
   "canisters": {
     "flux_backend": {
       "main": "src/flux_backend/main.mo",
-      "type": "motoko"
+      "type": "motoko",
+      "args": "--enhanced-orthogonal-persistence"
     },
     "flux_frontend": {
       "dependencies": [

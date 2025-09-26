@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Wallet, Play, Users, Zap, ArrowRight, Gamepad2, Headphones, Video, Shield, Sparkles, Coins, Trophy, Menu, X } from 'lucide-react';
@@ -6,6 +6,37 @@ import { Button } from '../ui/Button';
 import { useWallet } from '../../hooks/useWallet';
 import { useAppStore } from '../../store/appStore';
 import toast from 'react-hot-toast';
+import { Canvas } from '@react-three/fiber';
+import { Float, Environment, OrbitControls, MeshDistortMaterial } from '@react-three/drei';
+
+const Hero3D: React.FC = () => {
+  return (
+    <Canvas camera={{ position: [0, 0, 4], fov: 45 }}>
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[5, 5, 5]} intensity={0.8} />
+      <Suspense fallback={null}>
+        <Float speed={1.5} rotationIntensity={0.4} floatIntensity={0.8}>
+          <mesh>
+            <icosahedronGeometry args={[1, 2]} />
+            <MeshDistortMaterial
+              color="#6366f1"
+              emissive="#818cf8"
+              emissiveIntensity={0.15}
+              roughness={0.1}
+              metalness={0.6}
+              distort={0.25}
+              speed={1.2}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+        </Float>
+        <Environment files="/hdri/potsdamer_platz_1k.hdr" />
+      </Suspense>
+      <OrbitControls enablePan={false} enableZoom={false} autoRotate autoRotateSpeed={0.4} />
+    </Canvas>
+  );
+};
 
 export const LandingPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);

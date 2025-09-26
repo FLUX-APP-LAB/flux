@@ -158,23 +158,23 @@ export const UserProfile: React.FC = () => {
     <div className="min-h-screen bg-flux-bg-primary">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/60 to-transparent">
-        <div className="flex items-center justify-between p-4 pt-12">
-          <Button size="sm" variant="ghost" onClick={() => setActivePage('home')}>
-            <ArrowLeft className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-between p-3 md:p-4 pt-8 md:pt-12">
+          <Button size="sm" variant="ghost" onClick={() => setActivePage('home')} className="p-2">
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-white" />
           </Button>
           <div className="flex items-center space-x-2">
-            <Button size="sm" variant="ghost">
-              <Share className="w-5 h-5 text-white" />
+            <Button size="sm" variant="ghost" className="p-2">
+              <Share className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </Button>
-            <Button size="sm" variant="ghost">
-              <MoreHorizontal className="w-5 h-5 text-white" />
+            <Button size="sm" variant="ghost" className="p-2">
+              <MoreHorizontal className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </Button>
           </div>
         </div>
       </div>
 
       {/* Profile Banner */}
-      <div className="relative h-64 overflow-hidden">
+      <div className="relative h-48 md:h-64 overflow-hidden">
         <img
           src={profileUser?.banner}
           alt="Profile banner"
@@ -184,9 +184,9 @@ export const UserProfile: React.FC = () => {
       </div>
 
       {/* Profile Info */}
-      <div className="relative -mt-16 px-4">
-        <div className="flex items-end justify-between mb-4">
-          <div className="flex items-end space-x-4">
+      <div className="relative -mt-12 md:-mt-16 px-3 md:px-4">
+        <div className="flex items-end justify-between mb-3 md:mb-4">
+          <div className="flex items-end space-x-3 md:space-x-4">
             <Avatar
               src={profileUser?.avatar || ''}
               alt={profileUser?.displayName || ''}
@@ -195,7 +195,7 @@ export const UserProfile: React.FC = () => {
               tier={profileUser?.tier}
             />
             <div className="pb-2">
-              <h1 className="text-2xl font-bold text-flux-text-primary">
+              <h1 className="text-xl md:text-2xl font-bold text-flux-text-primary">
                 {profileUser?.displayName}
               </h1>
               <p className="text-flux-text-secondary">@{profileUser?.username}</p>

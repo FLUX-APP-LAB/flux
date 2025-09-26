@@ -71,7 +71,7 @@ export const WalletScreen: React.FC = () => {
   
 
   return (
-    <div className="min-h-screen bg-flux-bg-primary p-6">
+    <div className="min-h-screen bg-flux-bg-primary p-3 md:p-6 pb-20">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -82,7 +82,7 @@ export const WalletScreen: React.FC = () => {
         </div>
 
         {/* Wallet Address Card */}
-        <div className="bg-flux-bg-secondary rounded-2xl p-6 mb-6">
+        <div className="bg-flux-bg-secondary rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-flux-text-primary mb-1">
@@ -103,7 +103,7 @@ export const WalletScreen: React.FC = () => {
         </div>
 
         {/* Balance Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
             className="bg-gradient-to-br from-flux-primary to-flux-accent-purple rounded-2xl p-6 text-white"
             whileHover={{ scale: 1.02 }}

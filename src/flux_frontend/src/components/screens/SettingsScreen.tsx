@@ -51,7 +51,7 @@ export const SettingsScreen: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-flux-bg-primary pt-20 md:pt-20 lg:pt-6 px-4 md:px-6">
+    <div className="min-h-screen bg-flux-bg-primary pt-16 md:pt-20 lg:pt-6 px-3 md:px-4 lg:px-6 pb-20">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -69,7 +69,7 @@ export const SettingsScreen: React.FC = () => {
         {/* Settings Sections */}
         <div className="space-y-6">
           {settingsSections.map((section, sectionIndex) => (
-            <div key={sectionIndex} className="bg-flux-bg-secondary rounded-xl p-6">
+            <div key={sectionIndex} className="bg-flux-bg-secondary rounded-xl p-4 md:p-6">
               <div className="flex items-center space-x-3 mb-4">
                 <section.icon className="w-5 h-5 text-flux-primary" />
                 <h2 className="text-lg font-semibold text-flux-text-primary">{section.title}</h2>
@@ -94,7 +94,7 @@ export const SettingsScreen: React.FC = () => {
         </div>
 
         {/* Additional Options */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="mt-6 md:mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <div className="bg-flux-bg-secondary rounded-xl p-6">
             <div className="flex items-center space-x-3 mb-4">
               <Globe className="w-5 h-5 text-flux-primary" />
